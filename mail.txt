@@ -1,0 +1,86 @@
+Hi Rahul,
+
+Thank you for your patience and for sharing the detailed requirements regarding the Reditus Labs brand asset delivery.
+
+As requested, we have now prepared the complete finalized logo asset package with all the required variations and industry-standard formats. The files have been organized systematically to make them easy to access and use across web, UI/UX, print, and future design workflows.
+
+Final Package Contents
+The delivery includes 4 primary logo variations:
+
+Vertical Logo
+
+Horizontal Logo
+
+Logo Mark
+
+Typography
+
+Each logo variation has been provided in 2 color versions:
+
+Black Version
+
+White Version
+
+Each Black and White version includes the following 4 file formats:
+
+PNG – High-resolution transparent raster format for general digital use
+
+SVG – Scalable vector format for websites, frontend development, UI/UX, and responsive applications
+
+EPS – Industry-standard vector format for professional printing and external vendor workflows
+
+Affinity (.afdesign) – Editable source file for future modifications and design workflows
+
+Complete Asset Breakdown
+01. Vertical Logo
+
+Black – PNG, SVG, EPS, Affinity
+
+White – PNG, SVG, EPS, Affinity
+
+02. Horizontal Logo
+
+Black – PNG, SVG, EPS, Affinity
+
+White – PNG, SVG, EPS, Affinity
+
+03. Logo Mark
+
+Black – PNG, SVG, EPS, Affinity
+
+White – PNG, SVG, EPS, Affinity
+
+04. Typography
+
+Black – PNG, SVG, EPS, Affinity
+
+White – PNG, SVG, EPS, Affinity
+
+This results in a total of 32 finalized logo assets:
+
+8 PNG files
+
+8 SVG files
+
+8 EPS files
+
+8 Affinity (.afdesign) source files
+
+The complete package has been organized under the following structure:
+
+REDITUS_LABS_BRAND_ASSETS_FINAL
+
+and is delivered as:
+
+Reditus_Labs_Brand_Assets_Final_v1.0.zip
+
+We have also ensured that the editable Affinity source files are provided separately for both the Black and White versions, as requested.
+
+We sincerely apologize for the delay in the earlier delivery and appreciate your patience. We have taken your feedback regarding turnaround times seriously and will ensure better coordination and timely delivery for future requirements.
+
+Please find the complete finalized asset package attached.
+
+Kindly review the files at your convenience, and please let us know if there are any specific technical issues with the exported assets.
+
+Best regards,
+JSN Designs Team
