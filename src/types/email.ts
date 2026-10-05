@@ -13,7 +13,9 @@ export type TypographyStyle = {
 };
 
 export type EmailTable = {
-  rows: string[][];
+  rows: EmailTableCell[][];
+  columnWidths?: number[];
+  rowHeights?: number[];
   header: boolean;
   align: 'left' | 'center' | 'right';
   fontSize: number;
@@ -23,6 +25,23 @@ export type EmailTable = {
   borderColor: string;
   borderWidth: number;
   cellPadding: number;
+};
+
+export type EmailTableCell = {
+  id: string;
+  content: string;
+  colSpan?: number;
+  rowSpan?: number;
+  fontSize?: number;
+  fontWeight?: number;
+  italic?: boolean;
+  color?: string;
+  backgroundColor?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  padding?: number;
+  borderColor?: string;
+  borderWidth?: number;
 };
 
 export type SectionBlock = {
