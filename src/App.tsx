@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Mail,
   Menu,
-  Plus,
   Settings,
   Users,
   X,
@@ -17,6 +16,7 @@ import { toast } from "sonner";
 import EmailStudio from "./EmailStudio";
 import QuotationsPage from "./pages/QuotationsPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import ClientsPage from "./pages/ClientsPage";
 import BusinessProfileForm from "./components/BusinessProfileForm";
 import logoUrl from "./assets/JSN DESIGN.png";
 
@@ -27,15 +27,6 @@ type Page =
   | "orders"
   | "clients"
   | "settings";
-type Client = {
-  id: string;
-  client_code: string;
-  name: string;
-  company_name: string | null;
-  email: string | null;
-  phone: string | null;
-  created_at: string;
-};
 type Stats = {
   clients: number;
   open_quotations: number;
@@ -105,18 +96,11 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clientTarget, setClientTarget] = useState<string | null>(null);
+  const [quotationClient, setQuotationClient] = useState<string | null>(null);
+  const [quotationTarget, setQuotationTarget] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    company_name: "",
-    email: "",
-    phone: "",
-    address: "",
-    notes: "",
-  });
   const [gmail, setGmail] = useState<string | null>(null);
   const [gmailError, setGmailError] = useState(false);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
@@ -145,16 +129,6 @@ export default function App() {
         })
         .finally(() => setLoading(false));
     }
-    if (page === "clients") {
-      setLoading(true);
-      api<Client[]>("/api/clients")
-        .then(setClients)
-        .catch((e) => {
-          setLoadError(e.message);
-          toast.error(e.message);
-        })
-        .finally(() => setLoading(false));
-    }
     if (page === "settings") {
       setGmailError(false);
       api<{ gmailUser: string | null }>("/api/email/config")
@@ -165,31 +139,6 @@ export default function App() {
         });
     }
   }, [page]);
-  const createClient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api("/api/clients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      setForm({
-        name: "",
-        company_name: "",
-        email: "",
-        phone: "",
-        address: "",
-        notes: "",
-      });
-      setShowForm(false);
-      setClients(await api<Client[]>("/api/clients"));
-      toast.success("Client saved to this device.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to save client.",
-      );
-    }
-  };
   const restore = async () => {
     if (!restoreFile) return;
     const data = new FormData();
@@ -199,7 +148,6 @@ export default function App() {
       setRestoreFile(null);
       toast.success("Database restored. Refreshing records.");
       if (page === "dashboard") setStats(await api<Stats>("/api/dashboard"));
-      if (page === "clients") setClients(await api<Client[]>("/api/clients"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Restore failed.");
     }
@@ -256,131 +204,15 @@ export default function App() {
           ) : null}
         </>
       );
-    if (page === "clients")
-      return (
-        <>
-          <div className="page-toolbar">
-            <span>
-              {clients.length} client{clients.length === 1 ? "" : "s"}
-            </span>
-            <button
-              className="studio-button"
-              onClick={() => setShowForm((v) => !v)}
-            >
-              <Plus size={15} /> Add client
-            </button>
-          </div>
-          {showForm && (
-            <form
-              className="business-panel client-form"
-              onSubmit={createClient}
-            >
-              <h2>New client</h2>
-              <label>
-                Name
-                <input
-                  required
-                  maxLength={160}
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-              </label>
-              <label>
-                Company
-                <input
-                  value={form.company_name}
-                  onChange={(e) =>
-                    setForm({ ...form, company_name: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                />
-              </label>
-              <label>
-                Phone
-                <input
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                />
-              </label>
-              <label className="wide">
-                Address
-                <input
-                  value={form.address}
-                  onChange={(e) =>
-                    setForm({ ...form, address: e.target.value })
-                  }
-                />
-              </label>
-              <label className="wide">
-                Notes
-                <textarea
-                  rows={3}
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
-              </label>
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setShowForm(false)}
-                >
-                  Cancel
-                </button>
-                <button className="studio-button" type="submit">
-                  Save client
-                </button>
-              </div>
-            </form>
-          )}
-          {loadError ? (
-            <LoadFailure message={loadError} />
-          ) : loading ? (
-            <div className="business-panel">Loading clients…</div>
-          ) : clients.length ? (
-            <div className="business-panel table-wrap">
-              <table className="records-table">
-                <thead>
-                  <tr>
-                    <th>Client</th>
-                    <th>Company</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Reference</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((c) => (
-                    <tr key={c.id}>
-                      <td>{c.name}</td>
-                      <td>{c.company_name || "—"}</td>
-                      <td>{c.email || "—"}</td>
-                      <td>{c.phone || "—"}</td>
-                      <td>{c.client_code}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <Empty
-              title="No clients yet"
-              text="Add your first client to begin keeping business records on this device."
-            />
-          )}
-        </>
-      );
+    if (page === "clients") return <ClientsPage initialClientId={clientTarget} onClearInitial={() => setClientTarget(null)} onCreateQuotation={(id) => { setQuotationClient(id); navigate("quotations"); }} onOpenQuotation={(id) => { setQuotationTarget(id); navigate("quotations"); }} />;
     if (page === "quotations")
       return (
         <QuotationsPage
-          onClients={() => navigate("clients")}
+          onClients={(id) => { setClientTarget(id || null); navigate("clients"); }}
+          defaultClientId={quotationClient}
+          onDefaultClientConsumed={() => setQuotationClient(null)}
+          initialQuotationId={quotationTarget}
+          onInitialQuotationConsumed={() => setQuotationTarget(null)}
           onConverted={() => navigate("orders")}
           onEmailStudio={() => {
             toast("Attach the downloaded quotation PDF and review your email before sending.");
@@ -389,7 +221,7 @@ export default function App() {
         />
       );
     if (page === "orders")
-      return <ProjectsPage onClients={() => navigate("clients")} />;
+      return <ProjectsPage onClients={(id) => { setClientTarget(id || null); navigate("clients"); }} />;
     return (
       <>
         <BusinessProfileForm />

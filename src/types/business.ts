@@ -7,6 +7,7 @@ export type Client = {
   phone: string | null;
   created_at: string;
 };
+export type ClientDetail = Client & { address: string | null; notes: string | null; updated_at: string; archived_at: string | null };
 
 export type QuotationStatus =
   | "draft"

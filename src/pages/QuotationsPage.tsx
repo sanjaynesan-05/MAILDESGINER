@@ -57,10 +57,18 @@ export default function QuotationsPage({
   onClients,
   onConverted,
   onEmailStudio,
+  defaultClientId,
+  onDefaultClientConsumed,
+  initialQuotationId,
+  onInitialQuotationConsumed,
 }: {
-  onClients: () => void;
+  onClients: (clientId?: string) => void;
   onConverted: () => void;
   onEmailStudio: () => void;
+  defaultClientId?: string | null;
+  onDefaultClientConsumed?: () => void;
+  initialQuotationId?: string | null;
+  onInitialQuotationConsumed?: () => void;
 }) {
   const [quotes, setQuotes] = useState<Quotation[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -101,6 +109,10 @@ export default function QuotationsPage({
       .then(setQuotationDefaults)
       .catch(() => undefined);
   }, [refresh]);
+  useEffect(() => {
+    if (!initialQuotationId) return;
+    api<Quotation>(`/api/quotations/${initialQuotationId}`).then(setDetails).catch((e) => toast.error(e.message)).finally(() => onInitialQuotationConsumed?.());
+  }, [initialQuotationId, onInitialQuotationConsumed]);
 
   const totals = useMemo(() => {
     const subtotal =
@@ -118,7 +130,8 @@ export default function QuotationsPage({
     setEditingId(null);
     const validUntil = new Date(`${dateToday()}T00:00:00.000Z`);
     validUntil.setUTCDate(validUntil.getUTCDate() + (quotationDefaults?.default_validity_days ?? 30));
-    setForm({ ...blankForm(), client_id: clients[0]?.id ?? "", terms: quotationDefaults?.default_terms ?? "", valid_until: validUntil.toISOString().slice(0, 10) });
+    setForm({ ...blankForm(), client_id: (defaultClientId && clients.some((c) => c.id === defaultClientId) ? defaultClientId : clients[0]?.id) ?? "", terms: quotationDefaults?.default_terms ?? "", valid_until: validUntil.toISOString().slice(0, 10) });
+    onDefaultClientConsumed?.();
   };
   const startEdit = async (quote: Quotation) => {
     try {
@@ -277,7 +290,7 @@ export default function QuotationsPage({
       {!clients.length && !loading && (
         <div className="workflow-note">
           Add a client before creating a quotation.{" "}
-          <button className="inline-link" onClick={onClients}>
+          <button className="inline-link" onClick={() => onClients()}>
             Open Clients
           </button>
         </div>
@@ -656,7 +669,7 @@ export default function QuotationsPage({
                 </span>
                 <h2>{details.title}</h2>
                 <p>
-                  {details.client_name} · {details.status}
+                  <button className="inline-link" onClick={() => onClients(details.client_id)}>{details.client_name}</button> · {details.status}
                 </p>
               </div>
               <button

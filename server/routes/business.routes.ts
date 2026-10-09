@@ -68,15 +68,27 @@ router.get("/dashboard", (_req, res) => {
   });
 });
 
-router.get("/clients", (_req, res) =>
-  res.json(
-    getDatabase()
-      .prepare(
-        "SELECT * FROM clients WHERE archived_at IS NULL ORDER BY created_at DESC",
-      )
-      .all(),
-  ),
-);
+router.get("/clients", (req, res) => {
+  const query = z.object({ search: z.string().trim().max(200).optional(), status: z.enum(["active", "archived", "all"]).default("active") }).safeParse(req.query);
+  if (!query.success) return bad(res, "Invalid client filters.");
+  const { search = "", status } = query.data;
+  const archived = status === "archived" ? "IS NOT NULL" : "IS NULL";
+  const statusClause = status === "all" ? "1=1" : `archived_at ${archived}`;
+  const term = `%${search}%`;
+  res.json(getDatabase().prepare(`SELECT * FROM clients WHERE ${statusClause} AND (?='' OR name LIKE ? OR COALESCE(company_name,'') LIKE ? OR COALESCE(email,'') LIKE ? OR client_code LIKE ?) ORDER BY created_at DESC`).all(search, term, term, term, term));
+});
+router.get("/clients/:id", (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return bad(res, "Invalid client id.");
+  const db = getDatabase();
+  const client = db.prepare("SELECT * FROM clients WHERE id=?").get(id.data) as any;
+  if (!client) return bad(res, "Client not found.", 404);
+  const quotations = db.prepare("SELECT id,quotation_number,title,status,total_minor,currency,issue_date,valid_until FROM quotations WHERE client_id=? ORDER BY created_at DESC").all(id.data);
+  const orders = db.prepare(`SELECT o.id,o.order_number,o.title,o.status,o.agreed_amount_minor,o.currency,o.order_date,o.due_date,COALESCE(p.paid,0) paid_minor,o.agreed_amount_minor-COALESCE(p.paid,0) outstanding_minor FROM orders o LEFT JOIN (SELECT order_id,SUM(amount_minor) paid FROM payments GROUP BY order_id) p ON p.order_id=o.id WHERE o.client_id=? ORDER BY o.created_at DESC`).all(id.data) as any[];
+  const tasks = db.prepare(`SELECT t.id,t.order_id,o.order_number,t.title,t.status,t.priority,t.due_date,t.completed_at FROM tasks t JOIN orders o ON o.id=t.order_id WHERE o.client_id=? ORDER BY t.due_date IS NULL,t.due_date`).all(id.data);
+  const outstanding_minor = orders.filter((o) => !["cancelled", "closed"].includes(o.status)).reduce((sum, o) => sum + o.outstanding_minor, 0);
+  res.json({ client, quotations, orders, tasks, outstanding_minor });
+});
 router.post("/clients", (req, res) => {
   const input = parsed(clientSchema, req.body);
   if (!input.success)
@@ -113,17 +125,36 @@ router.post("/clients", (req, res) => {
   }
   res.status(201).json(db.prepare("SELECT * FROM clients WHERE id=?").get(id));
 });
+router.put("/clients/:id", (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return bad(res, "Invalid client id.");
+  const input = parsed(clientSchema, req.body);
+  if (!input.success) return bad(res, input.error.issues[0]?.message || "Invalid client details.");
+  const db = getDatabase();
+  const data = input.data;
+  const result = db.prepare("UPDATE clients SET name=?,company_name=?,email=?,phone=?,address=?,notes=?,updated_at=? WHERE id=?").run(data.name, data.company_name || null, data.email || null, data.phone || null, data.address || null, data.notes || null, now(), id.data);
+  if (!result.changes) return bad(res, "Client not found.", 404);
+  res.json(db.prepare("SELECT * FROM clients WHERE id=?").get(id.data));
+});
 router.patch("/clients/:id/archive", (req, res) => {
   const id = z.string().uuid().safeParse(req.params.id);
   if (!id.success) return bad(res, "Invalid client id.");
+  const stamp = now();
   const info = getDatabase()
     .prepare(
       "UPDATE clients SET archived_at=?,updated_at=? WHERE id=? AND archived_at IS NULL",
     )
-    .run(now(), now(), id.data);
+    .run(stamp, stamp, id.data);
   return info.changes
     ? res.json({ ok: true })
     : bad(res, "Client not found.", 404);
+});
+router.patch("/clients/:id/restore", (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return bad(res, "Invalid client id.");
+  const stamp = now();
+  const info = getDatabase().prepare("UPDATE clients SET archived_at=NULL,updated_at=? WHERE id=? AND archived_at IS NOT NULL").run(stamp, id.data);
+  return info.changes ? res.json({ ok: true }) : bad(res, "Archived client not found.", 404);
 });
 
 router.get("/quotations", (req, res) => {

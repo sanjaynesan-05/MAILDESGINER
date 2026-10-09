@@ -45,7 +45,7 @@ const taskStatuses: TaskStatus[] = [
 ];
 const priorities: Priority[] = ["low", "normal", "high", "urgent"];
 
-export default function ProjectsPage({ onClients }: { onClients: () => void }) {
+export default function ProjectsPage({ onClients }: { onClients: (clientId?: string) => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -282,7 +282,7 @@ export default function ProjectsPage({ onClients }: { onClients: () => void }) {
       {!clients.length && !loading && (
         <div className="workflow-note">
           Add a client before creating an order.{" "}
-          <button className="inline-link" onClick={onClients}>
+          <button className="inline-link" onClick={() => onClients()}>
             Open Clients
           </button>
         </div>
@@ -638,7 +638,7 @@ export default function ProjectsPage({ onClients }: { onClients: () => void }) {
                     )}
                     <div className="project-detail-meta">
                       <span>
-                        Client <b>{order.client_name}</b>
+                          Client <button className="inline-link" onClick={() => onClients(order.client_id)}>{order.client_name}</button>
                       </span>
                       <span>
                         Priority <b>{order.priority}</b>

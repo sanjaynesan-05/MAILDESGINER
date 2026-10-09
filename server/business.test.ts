@@ -344,6 +344,28 @@ test("business database, APIs, calculations, backups and HTML generation", async
         ).status,
         200,
       );
+      const originalClient = (await call(`/clients/${client.id}`)).data.client;
+      assert.equal((await call("/clients/not-a-uuid")).status, 400);
+      assert.equal((await call(`/clients/${client.id}`, "PUT", { name: "", email: "bad" })).status, 400);
+      const edited = await call(`/clients/${client.id}`, "PUT", { name: "A Client Updated", company_name: "JSN Studio", email: " NEW@EXAMPLE.COM ", phone: "+91 123", address: "Pune", notes: "Updated notes" });
+      assert.equal(edited.status, 200);
+      assert.equal(edited.data.email, "new@example.com");
+      assert.equal(edited.data.client_code, originalClient.client_code);
+      assert.equal(edited.data.created_at, originalClient.created_at);
+      assert.equal((await call("/clients?search=JSN%20Studio")).data[0].id, client.id);
+      assert.equal((await call(`/clients/${client.id}`)).data.quotations.some((q: any) => q.id === quote.data.id), true);
+      const clientDetails = await call(`/clients/${client.id}`);
+      assert.equal(clientDetails.data.orders.some((o: any) => o.id === first.data.id && o.paid_minor === 5000 && o.outstanding_minor === 17500), true);
+      assert.equal(clientDetails.data.tasks.some((t: any) => t.id === task.id && t.order_number === first.data.order_number), true);
+      const archiveResult = await call(`/clients/${client.id}/archive`, "PATCH");
+      assert.equal(archiveResult.status, 200);
+      assert.equal((await call("/clients")).data.some((row: any) => row.id === client.id), false);
+      assert.equal((await call("/clients?status=archived&search=CL-")).data[0].id, client.id);
+      assert.equal((await call(`/clients/${client.id}`)).data.quotations.some((q: any) => q.id === quote.data.id), true);
+      assert.equal((await call("/quotations", "POST", quotationInput)).status, 404);
+      assert.equal((await call("/orders", "POST", { client_id: client.id, title: "Archived order", agreed_amount_minor: 100 })).status, 404);
+      assert.equal((await call(`/clients/${client.id}/restore`, "PATCH")).status, 200);
+      assert.equal((await call("/clients")).data.some((row: any) => row.id === client.id), true);
       const dashboard = await call("/dashboard");
       assert.equal(dashboard.data.clients, 1);
       assert.equal(dashboard.data.active_orders, 1);

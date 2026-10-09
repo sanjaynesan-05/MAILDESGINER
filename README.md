@@ -92,7 +92,7 @@ The shared HTML generator and its email-safe output remain integrated. Business 
 
 ### Clients
 
-The Clients screen reads active clients from the API and can create a client. Records include a generated client reference, name, optional company, email, phone, address, notes, creation/update timestamps, and an archive timestamp. Email values are normalized to lowercase. The API supports archiving; a client archive control is not yet exposed in the screen.
+The Clients screen provides a searchable active/archived directory (name, company, email, and client reference), creation, details, editing, archive, and restore. The detail view shows timestamps and notes, linked quotations, orders with payment-derived balances, and tasks attributed only through their linked orders. Quotation references open in the quotation detail view; client references from quotations and order details open the matching client record. Creating a quotation from a client preselects that client. Email values are normalized to lowercase; editing preserves the stable client ID, generated reference, and creation time. Archiving is confirmed and reversible; it never removes linked business records. Archived clients remain readable and editable, but cannot be selected for new quotations or direct orders until restored. The API defaults to active clients and supports `status=archived|all` and a `search` term.
 
 ### Quotations
 
@@ -114,12 +114,13 @@ The repository keeps the Vite frontend at the project root and the Express API i
 
 ```text
 src/
-  App.tsx                         Business Studio shell, navigation, dashboard and business screens
+  App.tsx                         Business Studio shell, navigation and dashboard
   EmailStudio.tsx                 Preserved email editor and send workflow
   main.tsx                        React entry point and toast provider
   components/SpreadsheetTableEditor.tsx
   pages/QuotationsPage.tsx         Quotation editor, detail view, lifecycle and conversion
   pages/ProjectsPage.tsx           Order, task and payment workflows
+  pages/ClientsPage.tsx            Searchable client directory, details and lifecycle actions
   services/api/apiClient.ts        Shared local API client
   services/html.service.ts        Shared email HTML generation and sanitization
   types/email.ts                  Email editor data types
@@ -197,9 +198,12 @@ The API base is `http://127.0.0.1:5000/api` when running directly; frontend code
 
 | Method  | Path                   | Result                                                                                             |
 | ------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
-| `GET`   | `/clients`             | List non-archived clients.                                                                         |
+| `GET`   | `/clients`             | Search/filter clients; `search` matches name, company, email, or reference; `status` is `active` (default), `archived`, or `all`. |
+| `GET`   | `/clients/:id`         | Read a client, linked quotations/orders, order-derived payments/balances, and tasks linked through those orders. |
 | `POST`  | `/clients`             | Create a client. Required: `name`; optional: `company_name`, `email`, `phone`, `address`, `notes`. |
+| `PUT`   | `/clients/:id`         | Update validated contact and notes fields; preserves ID, reference, and creation timestamp. |
 | `PATCH` | `/clients/:id/archive` | Archive an active client.                                                                          |
+| `PATCH` | `/clients/:id/restore` | Restore an archived client to the active directory.                                                 |
 
 Example:
 
