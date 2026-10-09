@@ -71,10 +71,9 @@ export function createQuotationPdf(data: PdfQuotationData, items: PdfQuotationIt
 
   if (existsSync(logoPath)) doc.image(logoPath, margin, 40, { fit: [58, 58] });
   const businessX = existsSync(logoPath) ? margin + 72 : margin;
-  doc.fillColor(green).font("Helvetica-Bold").fontSize(18).text(safeText(data.business_name) || "Business", businessX, 44, { width: usableWidth - 72 });
-  doc.fillColor(muted).font("Helvetica").fontSize(8.5);
+  doc.fillColor(green).font("Helvetica-Bold").fontSize(18).text(data.business_name || "Business", businessX, 44, { width: usableWidth - 72 });
   const businessContact = [data.contact_person, data.email, data.phone, data.address, data.website].filter(Boolean).join("  |  ");
-  if (businessContact) doc.text(businessContact, businessX, 67, { width: usableWidth - 72, lineGap: 2 });
+  if (businessContact) doc.font("Helvetica").fontSize(8.5).text(businessContact, businessX, 67, { width: usableWidth - 72, lineGap: 2 });
   doc.moveTo(margin, 106).lineTo(pageWidth - margin, 106).strokeColor("#d9e2de").stroke();
 
   doc.fillColor(green).font("Helvetica-Bold").fontSize(22).text("QUOTATION", margin, 122);
@@ -83,9 +82,8 @@ export function createQuotationPdf(data: PdfQuotationData, items: PdfQuotationIt
   doc.text(`Valid until  ${data.valid_until || "No expiry"}`, margin, 185);
   doc.fillColor(muted).font("Helvetica-Bold").fontSize(8).text("PREPARED FOR", pageWidth / 2 + 5, 127);
   doc.fillColor("#18211e").font("Helvetica-Bold").fontSize(11).text(data.client_name, pageWidth / 2 + 5, 142, { width: pageWidth / 2 - margin - 5 });
-  doc.font("Helvetica").fontSize(9);
   const clientLines = [data.company_name, data.client_email, data.client_phone, data.client_address].filter(Boolean).join("\n");
-  if (clientLines) doc.text(clientLines, pageWidth / 2 + 5, 158, { width: pageWidth / 2 - margin - 5, lineGap: 2 });
+  if (clientLines) doc.font("Helvetica").fontSize(9).text(clientLines, pageWidth / 2 + 5, 158, { width: pageWidth / 2 - margin - 5, lineGap: 2 });
 
   let y = Math.max(doc.y, 205) + 10;
   doc.fillColor(green).font("Helvetica-Bold").fontSize(14).text(data.title, margin, y, { width: usableWidth });
@@ -125,10 +123,13 @@ export function createQuotationPdf(data: PdfQuotationData, items: PdfQuotationIt
     doc.y = y + 7;
     doc.text(item.description, cols.description, y + 7, { width: widths.description, lineGap: 2 });
     doc.y = y + 7;
+    doc.font("Helvetica");
     doc.text(String(item.quantity), cols.qty, y + 7, { width: widths.qty, align: "right" });
     doc.y = y + 7;
+    doc.font("Helvetica");
     doc.text(money(item.unit_price_minor, data.currency), cols.unit, y + 7, { width: widths.unit, align: "right" });
     doc.y = y + 7;
+    doc.font("Helvetica");
     doc.text(money(item.line_total_minor, data.currency), cols.amount, y + 7, { width: widths.amount, align: "right" });
     y += rowHeight;
     doc.moveTo(margin, y).lineTo(pageWidth - margin, y).strokeColor("#e0e7e3").stroke();

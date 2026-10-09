@@ -26,10 +26,9 @@ test("quotation PDF contains persisted values and paginates long item lists", as
   const first = await render();
   assert.equal(first.subarray(0, 5).toString(), "%PDF-");
   const extracted = await extractPdfText(first);
-  for (const value of ["QT-20261009-ABC12345", "Brand identity", "Logo", "Guide", "INR 225.00", "Payment due within 14 days.", "Page 1"])
-    assert.ok(extracted.text.includes(value), `PDF should include ${value}`);
+  for (const value of ["QT-20261009-ABC12345", "Brand identity", "Logo", "Guide", "2", "INR 100.00", "INR 200.00", "INR 50.00", "INR 225.00", "Payment due within 14 days.", "Page 1"])
+    assert.ok(extracted.text.includes(value), `PDF should include ${value}; extracted: ${extracted.text}`);
   assert.ok(!extracted.text.includes("internal"), "Internal notes are excluded from customer PDFs.");
-
   const many = Array.from({ length: 100 }, (_, index) => ({
     description: `Service ${index + 1} ${"Detailed project service description ".repeat(8)}`,
     quantity: 1,
