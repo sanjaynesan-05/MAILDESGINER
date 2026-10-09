@@ -87,9 +87,13 @@ test("business database, APIs, calculations, backups and HTML generation", async
       legacy.exec(readFileSync(join(process.cwd(), "server/db/migrations/001_initial.sql"), "utf8"));
       legacy.prepare("INSERT INTO schema_migrations(version,applied_at) VALUES(1,?)").run(new Date().toISOString());
       legacy.prepare("INSERT INTO clients(id,client_code,name,created_at,updated_at) VALUES(?,?,?,?,?)").run("00000000-0000-4000-8000-000000000001", "CL-LEGACY", "Legacy client", "2020-01-01T00:00:00.000Z", "2020-01-01T00:00:00.000Z");
+      legacy.prepare("INSERT INTO quotations(id,quotation_number,client_id,title,subtotal_minor,total_minor,issue_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)").run("00000000-0000-4000-8000-000000000002", "QT-LEGACY", "00000000-0000-4000-8000-000000000001", "Legacy quotation", 2500, 2500, "2020-01-01", "2020-01-01T00:00:00.000Z", "2020-01-01T00:00:00.000Z");
+      legacy.prepare("INSERT INTO quotation_items(id,quotation_id,description,quantity,unit_price_minor,line_total_minor,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").run("00000000-0000-4000-8000-000000000003", "00000000-0000-4000-8000-000000000002", "Legacy line item", 1, 2500, 2500, "2020-01-01T00:00:00.000Z", "2020-01-01T00:00:00.000Z");
       legacy.close();
       const upgradedLegacy = openDatabase(legacyPath);
       assert.equal((upgradedLegacy.prepare("SELECT name FROM clients WHERE client_code='CL-LEGACY'").get() as any).name, "Legacy client");
+      assert.equal((upgradedLegacy.prepare("SELECT total_minor FROM quotations WHERE quotation_number='QT-LEGACY'").get() as any).total_minor, 2500);
+      assert.equal((upgradedLegacy.prepare("SELECT description FROM quotation_items WHERE quotation_id='00000000-0000-4000-8000-000000000002'").get() as any).description, "Legacy line item");
       assert.equal((upgradedLegacy.prepare("SELECT COUNT(*) count FROM schema_migrations").get() as any).count, 2);
       upgradedLegacy.close();
     },
@@ -409,6 +413,10 @@ test("business database, APIs, calculations, backups and HTML generation", async
           name.startsWith("business.sqlite.recovery-"),
         ),
       );
+      const restoredDb = initializeDatabase();
+      assert.equal((restoredDb.prepare("SELECT business_name FROM business_profile WHERE id=1").get() as any).business_name, "JSN Designs");
+      assert.ok((restoredDb.prepare("SELECT COUNT(*) count FROM quotations").get() as any).count > 0);
+      assert.ok((restoredDb.prepare("SELECT COUNT(*) count FROM quotation_items").get() as any).count > 0);
     },
   );
 

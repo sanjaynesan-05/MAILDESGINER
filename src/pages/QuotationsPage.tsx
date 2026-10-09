@@ -464,55 +464,64 @@ export default function QuotationsPage({
               </div>
               {form.items.map((item, index) => (
                 <div className="line-item-row" key={index}>
-                  <input
-                    aria-label={`Item ${index + 1} description`}
-                    required
-                    value={item.description}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        items: form.items.map((v, i) =>
-                          i === index
-                            ? { ...v, description: e.target.value }
-                            : v,
-                        ),
-                      })
-                    }
-                  />
-                  <input
-                    aria-label="Quantity"
-                    required
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={item.quantity}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        items: form.items.map((v, i) =>
-                          i === index ? { ...v, quantity: e.target.value } : v,
-                        ),
-                      })
-                    }
-                  />
-                  <input
-                    aria-label="Unit price in rupees"
-                    required
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.unit_price}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        items: form.items.map((v, i) =>
-                          i === index
-                            ? { ...v, unit_price: e.target.value }
-                            : v,
-                        ),
-                      })
-                    }
-                  />
+                  <label className="line-item-field line-item-description">
+                    <span>Description</span>
+                    <input
+                      aria-label={`Item ${index + 1} description`}
+                      required
+                      value={item.description}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          items: form.items.map((v, i) =>
+                            i === index
+                              ? { ...v, description: e.target.value }
+                              : v,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="line-item-field line-item-quantity">
+                    <span>Quantity</span>
+                    <input
+                      aria-label="Quantity"
+                      required
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={item.quantity}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          items: form.items.map((v, i) =>
+                            i === index ? { ...v, quantity: e.target.value } : v,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="line-item-field line-item-unit-price">
+                    <span>Unit price (₹)</span>
+                    <input
+                      aria-label="Unit price in rupees"
+                      required
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.unit_price}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          items: form.items.map((v, i) =>
+                            i === index
+                              ? { ...v, unit_price: e.target.value }
+                              : v,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
                   <span className="line-total">{money(itemAmount(item))}</span>
                   <button
                     type="button"

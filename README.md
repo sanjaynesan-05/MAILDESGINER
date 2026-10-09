@@ -303,6 +303,7 @@ Restore accepts backups produced with this schema version. Restoring an older ba
 
 - By default, Express listens only on `127.0.0.1` and Vite binds its local development server. The application has no authentication, user accounts, or authorization model.
 - CORS is limited to `CLIENT_URL`; state-changing requests validate supplied Origin and loopback Host values. Helmet security headers and a 60-request-per-15-minute rate limit are enabled.
+- On 2026-10-09, `npm audit` reported 7 development-tree findings (5 high, 2 moderate); `npm audit --omit=dev` reported 0 production findings. Affected packages are `tailwindcss`, `braces`, `chokidar`, `fast-glob`, `micromatch`, `postcss-nested`, and `postcss-selector-parser`. The current Tailwind 3.4.19 range is affected; npm proposes Tailwind 4.3.3, a major upgrade. This audit was not force-fixed because Tailwind 4 requires build configuration and CSS compatibility work. Re-run both audit commands before release.
 - SQL values are passed as parameters. Business request bodies are validated at runtime. Database files and backups are not served by Vite.
 - Gmail credentials stay in the backend environment. Email attachment bytes are held in memory for the request and are not kept as a permanent upload archive.
 - `.env`, SQLite/database files, backup files, and upload data are excluded by `.gitignore`. Check the ignore rules before storing any custom data path inside the repository.
@@ -330,6 +331,14 @@ npm test
 - Existing generated email HTML and email API input validation/config secrecy.
 
 Tests do not use the normal `%LOCALAPPDATA%` business database and do not send real email. A production dependency security scan can be run with `npm audit --omit=dev`; the complete dependency tree can be inspected with `npm audit`.
+
+### Release verification (2026-10-09)
+
+- `npm test`: 7 passed, 0 failed, 0 skipped. This run included migration preservation for an existing quotation and line item, and backup/restore preservation for quotation, item, and business profile data.
+- `npm run build` and `git diff --check`: passed.
+- Dependency audit: 7 development-tree findings (5 high, 2 moderate); production-only audit: 0 findings. `npm audit fix --dry-run` proposed no dependency changes. See [Security and privacy](#security-and-privacy) for affected packages and the major Tailwind upgrade requirement.
+- Manual UI checks: desktop (1366px), tablet (768px), and mobile (390px) page widths showed no document-level horizontal overflow. The quotation editor was inspected at mobile width; line-item fields now stack with visible labels. Keyboard Tab moved focus from the editor close control to the client selector, which retained a visible browser focus outline. Settings and quotation details were inspected at desktop width.
+- Verification limits: the local app began returning HTTP 429 during the follow-up mobile detail-table visual check, so the detail-table CSS adjustment needs a fresh browser check after the local rate limit resets. The email editor was reviewed in source but not manually exercised in the browser. Automated email tests do not send mail.
 
 ## Troubleshooting
 

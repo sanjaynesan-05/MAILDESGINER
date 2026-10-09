@@ -935,6 +935,12 @@ body {
   font-size: 11px;
   color: #283b31;
 }
+.line-item-field {
+  min-width: 0;
+}
+.line-item-field > span {
+  display: none;
+}
 .line-total {
   font-size: 11px;
   text-align: right;
@@ -1169,8 +1175,27 @@ body {
     grid-column: 1;
   }
   .line-item-row {
-    grid-template-columns: minmax(100px, 1fr) 58px 86px 68px 28px;
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px 10px;
+    align-items: end;
+    padding: 10px 0;
+    border-top: 1px solid #edf0eb;
+  }
+  .line-item-description {
+    grid-column: 1 / -1;
+  }
+  .line-item-field > span {
+    display: block;
+    margin-bottom: 4px;
+    color: #68766d;
+    font-size: 10px;
+  }
+  .line-item-row .line-total {
+    text-align: left;
+    align-self: center;
+  }
+  .line-item-row .danger-action {
+    justify-self: end;
   }
   .line-item-row input {
     padding: 6px 5px;
@@ -1188,6 +1213,31 @@ body {
   }
   .workflow-modal > header h2 {
     font-size: 16px;
+  }
+  .detail-modal .table-wrap table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+  .detail-modal .table-wrap th,
+  .detail-modal .table-wrap td {
+    padding: 7px 4px;
+    font-size: 9px;
+    overflow-wrap: anywhere;
+  }
+  .detail-modal .table-wrap th:nth-child(1),
+  .detail-modal .table-wrap td:nth-child(1) {
+    width: 42%;
+  }
+  .detail-modal .table-wrap th:nth-child(2),
+  .detail-modal .table-wrap td:nth-child(2) {
+    width: 10%;
+  }
+  .detail-modal .table-wrap th:nth-child(3),
+  .detail-modal .table-wrap td:nth-child(3),
+  .detail-modal .table-wrap th:nth-child(4),
+  .detail-modal .table-wrap td:nth-child(4) {
+    width: 24%;
   }
 }
 .quotation-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin:0 0 18px}.quotation-metrics>div{display:flex;flex-direction:column;gap:7px;padding:14px 16px;border:1px solid var(--line,#e5e7eb);border-radius:12px;background:var(--panel,#fff)}.quotation-metrics span,.quotation-metrics small{font-size:12px;color:var(--muted,#6b7280)}.quotation-metrics strong{font-size:18px}.quotation-search{display:flex;align-items:center;gap:8px;min-width:220px;max-width:380px;flex:1}.quotation-search input{width:100%}@media(max-width:700px){.page-toolbar{flex-wrap:wrap}.quotation-search{order:3;max-width:none;flex-basis:100%}.quotation-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
