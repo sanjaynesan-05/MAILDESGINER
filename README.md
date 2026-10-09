@@ -1,124 +1,34 @@
-# JSN Mail Studio
+# JSN DESIGNS BUSINESS STUDIO
 
-JSN Mail Studio is an internal, manual HTML email builder for JSN Designs. It lets a user enter recipients and message content, format rich text, build reusable sections and tables, preview the generated email, attach files, send a test message, and send through Gmail SMTP.
+JSN DESIGNS BUSINESS STUDIO is a local-first business workspace built around the existing JSN Mail Studio email editor. It combines that editor and its Gmail SMTP workflow with a SQLite foundation for clients, quotations, orders, payments, and tasks.
 
-The application does not use AI, a database, authentication, a CRM, analytics, tracking, campaigns, or an external email delivery provider. Gmail SMTP and a Gmail App Password are used for delivery.
+This document describes the code that exists in this repository. Milestone 1 establishes the application shell, local database, validated API, client screen, record lists, dashboard, and backup/restore flow. It does not claim that future quotation, project, PDF, or AI interfaces are already implemented.
 
-## 1. Project Overview
+## Contents
 
-The project has two runtime parts:
+- [Requirements](#requirements)
+- [Install and run](#install-and-run)
+- [Configuration](#configuration)
+- [Application guide](#application-guide)
+- [Architecture](#architecture)
+- [Database and business rules](#database-and-business-rules)
+- [HTTP API](#http-api)
+- [Backup and restore](#backup-and-restore)
+- [Security and privacy](#security-and-privacy)
+- [Build and tests](#build-and-tests)
+- [Troubleshooting](#troubleshooting)
+- [Milestone 2 scope](#milestone-2-scope)
 
-- **Frontend:** React, Vite, and TypeScript. It runs the email builder and live preview in the browser.
-- **Backend:** Node.js, Express, TypeScript, and Nodemailer. It validates requests, handles temporary attachments, generates the final email HTML, and sends through Gmail SMTP.
+## Requirements
 
-During development, `npm run dev` starts both processes:
+- Windows, macOS, or Linux.
+- Node.js 20 or newer and npm.
+- A modern browser.
+- A Gmail or Google Workspace account with SMTP access and a Google App Password to send email. Gmail configuration is optional for using business records and the editor preview.
 
-- Vite frontend: `http://localhost:5173`
-- Express API: `http://localhost:5000`
+## Install and run
 
-Vite proxies `/api` requests to the Express server.
-
-## 2. Key Features
-
-- JSN Designs branded editor using `src/assets/JSN DESIGN.png`.
-- Recipient fields for To, CC, and BCC.
-- Subject, greeting, title, body, closing, and signature fields.
-- Inline rich-text editing for body and paragraph blocks.
-- Keyboard shortcuts for bold, italic, and underline.
-- Bulleted and numbered lists, alignment, links, text size, and text color.
-- Dynamic sections that can be added, duplicated, deleted, and reordered.
-- Section blocks for paragraphs, lists, images, CTA buttons, dividers, and tables.
-- Visual table editor with editable cells, rows, columns, header-row toggle, padding, colors, alignment, and basic typography settings.
-- Desktop and mobile preview modes.
-- Preview and generated HTML modes.
-- Fullscreen preview mode.
-- Copy generated HTML to the clipboard.
-- Live HTML size display with a warning above 90 KB.
-- Local draft autosave using browser `localStorage`.
-- Multiple attachments with a 10 MB per-file limit and a maximum of 10 files per request.
-- Send test and send email actions with loading states, validation, toast messages, and a confirmation dialog.
-- Gmail logo delivery using a Nodemailer CID attachment.
-
-## 3. Tech Stack
-
-### Frontend
-
-- React 18
-- Vite
-- TypeScript
-- Tailwind CSS and PostCSS
-- `lucide-react` for icons
-- `sonner` for toast notifications
-
-### Backend
-
-- Node.js
-- Express
-- TypeScript
-- `tsx` for running TypeScript directly
-- Nodemailer 10
-- Multer 2 for in-memory multipart uploads
-- Helmet for security headers
-- CORS
-- `express-rate-limit`
-- `dotenv`
-
-## 4. Project Structure
-
-The repository currently uses a root-level Vite frontend and an Express backend. There is no separate `client/` directory.
-
-```text
-.
-├─ index.html                 # Vite HTML entry point
-├─ package.json               # Scripts and dependencies
-├─ package-lock.json
-├─ vite.config.ts             # Vite config and /api proxy
-├─ tsconfig.json
-├─ tsconfig.app.json          # Frontend TypeScript configuration
-├─ tsconfig.node.json         # Server/config TypeScript configuration
-├─ tailwind.config.js
-├─ postcss.config.js
-├─ .env.example               # Environment variable template
-├─ .gitignore
-├─ README.md
-├─ mail.txt                   # Sample email copy; not loaded by the application
-├─ src/
-│  ├─ App.tsx                 # Main editor, preview, sending workflow
-│  ├─ main.tsx                # React entry point and toast provider
-│  ├─ vite-env.d.ts           # Vite asset type declarations
-│  ├─ assets/
-│  │  └─ JSN DESIGN.png       # JSN Designs logo
-│  ├─ services/
-│  │  └─ html.service.ts      # Email-safe HTML generation and sanitization
-│  ├─ templates/
-│  │  └─ templates.ts         # Legacy template metadata; no active picker
-│  ├─ types/
-│  │  └─ email.ts             # Draft, block, table, and typography types
-│  ├─ styles.css               # Main application styles
-│  └─ styles-extensions.css   # Rich editor, table, and preview styles
-└─ server/
-   ├─ index.ts                # Express app, middleware, and server startup
-   ├─ routes/
-   │  └─ email.routes.ts      # Email API and multipart handling
-   └─ services/
-      ├─ html.service.ts      # Re-exports the shared HTML generator
-      └─ mail.service.ts      # Gmail SMTP transport
-```
-
-Generated folders such as `node_modules/` and `dist/` are not source files. They are ignored or generated locally.
-
-## 5. Prerequisites
-
-- Node.js 20 or newer.
-- npm.
-- A Gmail or Google Workspace account allowed to send mail through SMTP.
-- Google 2-Step Verification enabled for that account.
-- A Gmail App Password.
-- A modern browser with support for `contentEditable` and the browser editing commands used by the rich-text toolbar.
-
-## 6. Installation
-
-From the project directory:
+From PowerShell on the current Windows workspace:
 
 ```powershell
 cd "D:\jsn mail"
@@ -126,398 +36,310 @@ npm install
 Copy-Item .env.example .env
 ```
 
-Edit `.env` with the Gmail settings described below. Do not commit `.env`.
+Edit `.env` to configure Gmail if needed, then start the local frontend and API together:
 
-## 7. Environment Configuration
-
-The backend loads `.env` through `dotenv`. The current `.env.example` is:
-
-```env
-GMAIL_USER=your-gmail-address@gmail.com
-GMAIL_APP_PASSWORD=your-16-character-app-password
-PORT=5000
-CLIENT_URL=http://localhost:5173
+```powershell
+npm run dev
 ```
 
-Variables:
+Open <http://localhost:5173>. The Express API listens on `127.0.0.1:5000`; Vite forwards `/api` requests to it. The database is created and initialized on the first server start.
 
-| Variable | Required | Description |
+To run only the API, use `npm start`. To build and type-check the frontend and backend, use `npm run build`. `npm run preview` serves the built frontend only; it does not start the Express API. Keep the API running separately when previewing the frontend.
+
+## Configuration
+
+Copy `.env.example` to `.env`. Values are read by the backend at startup.
+
+| Variable | Default | Description |
 | --- | --- | --- |
-| `GMAIL_USER` | Yes for sending | Gmail address used as the SMTP username and From address. |
-| `GMAIL_APP_PASSWORD` | Yes for sending | The 16-character Google App Password. This is not the normal Gmail password. |
-| `PORT` | No | Express API port. Defaults to `5000`. |
-| `CLIENT_URL` | No | Allowed CORS origin. Defaults to `http://localhost:5173`. |
+| `GMAIL_USER` | Empty | Gmail/Google Workspace sender address. |
+| `GMAIL_APP_PASSWORD` | Empty | Gmail App Password used by Nodemailer. It is never sent to the browser. |
+| `PORT` | `5000` | Express API port. |
+| `HOST` | `127.0.0.1` | Express bind host. Loopback is the intended default. |
+| `CLIENT_URL` | `http://localhost:5173` | Browser origin permitted by CORS and state-changing request checks. |
+| `DATABASE_PATH` | `%LOCALAPPDATA%\JSN Designs Business Studio\business.sqlite` on Windows | SQLite database file. Set an absolute path if you want another location. |
+| `BACKUP_DIR` | `%LOCALAPPDATA%\JSN Designs Business Studio\backups` on Windows | Folder for generated backup snapshots. |
 
-The frontend receives only the configured Gmail address and connection status from `/api/email/config`. The app password is never returned to the browser.
+On systems without `LOCALAPPDATA` or `APPDATA`, the database and backup folders default to `JSN Designs Business Studio` under the current working directory. The restore upload staging directory also lives under the local application data folder (or current working directory fallback). Database files are kept outside frontend source, public assets, and generated frontend bundles.
 
-## 8. Gmail App Password Setup
+Restart the API after changing `.env`. Do not put secrets in `VITE_` variables: Vite variables are available to frontend code.
 
-1. Sign in to the Google Account used in `GMAIL_USER`.
-2. Open the account’s **Security** settings.
-3. Enable **2-Step Verification** if it is not already enabled.
-4. Open **App passwords**.
-5. Create an app password named `JSN Mail Studio`.
-6. Copy the generated 16-character value.
-7. Put it in `.env` as `GMAIL_APP_PASSWORD`.
-8. Restart the backend after changing `.env`.
+## Application guide
+
+The sidebar provides Dashboard, Email Studio, Quotations, Orders & Projects, Clients, and Settings. Navigation uses browser history; the selected section is highlighted, and the sidebar collapses on wider screens and becomes a mobile drawer on narrow screens.
+
+### Dashboard
+
+Dashboard values come from SQLite queries. It shows active client count, draft/sent quotation count, active order count, open task count, outstanding order balances, and up to five upcoming open tasks. A new database displays zero counts and an honest empty task state; no sample revenue, orders, or clients are fabricated.
+
+### Email Studio
+
+The original email editor remains available from the Email Studio navigation item. It supports:
+
+- To, CC, BCC, subject, greeting, title, body, closing, and signature fields.
+- Rich text formatting and keyboard shortcuts, including bold, italic, and underline.
+- Lists, links, alignment, font sizing, and text color.
+- Addable, reorderable, duplicable, and removable email sections.
+- Paragraph, list, image, call-to-action, divider, and table blocks.
+- The existing spreadsheet-style table editor.
+- Desktop and mobile previews, generated HTML view, source inspection, and HTML copy.
+- Automatic local draft save in browser storage under `jsn-mail-draft`. This is an unsent composition, separate from SQLite business records.
+- Up to ten attachments per send, each limited to 10 MB. The browser and API enforce the limit.
+- Send-test and send-email actions with status notifications and a confirmation view after success.
+- Gmail SMTP delivery through Nodemailer. The JSN Designs logo is attached inline using the `cid:jsn-logo` content ID.
+
+The shared HTML generator and its email-safe output remain integrated. Business status changes do not trigger email or other external requests.
+
+### Clients
+
+The Clients screen reads active clients from the API and can create a client. Records include a generated client reference, name, optional company, email, phone, address, notes, creation/update timestamps, and an archive timestamp. Email values are normalized to lowercase. The API supports archiving; a client archive control is not yet exposed in the screen.
+
+### Quotations
+
+The Quotations screen reads saved quotations and shows reference, client, title, total, and status. The API can create a quotation with line items, calculate totals, change its status, return its details, and convert an accepted quotation into an order. The full quotation editor and item-editing workflow are deferred to Milestone 2.
+
+### Orders & Projects
+
+The Orders & Projects screen reads saved orders and shows client, project, status, agreed amount, and outstanding balance. The API supports order creation and status changes, payments, and tasks. Full project editing, task management, and payment entry screens are deferred to Milestone 2.
+
+### Settings
+
+Settings reports whether Gmail is configured without disclosing its password. It provides a database backup download and a restore upload. The database path can be changed with `DATABASE_PATH` in `.env`.
+
+## Architecture
+
+The repository keeps the Vite frontend at the project root and the Express API in `server/`:
+
+```text
+src/
+  App.tsx                         Business Studio shell, navigation, dashboard and business screens
+  EmailStudio.tsx                 Preserved email editor and send workflow
+  main.tsx                        React entry point and toast provider
+  components/SpreadsheetTableEditor.tsx
+  services/html.service.ts        Shared email HTML generation and sanitization
+  types/email.ts                  Email editor data types
+  assets/JSN DESIGN.png           Existing brand asset
+  styles.css
+  styles-extensions.css
+server/
+  index.ts                        Environment loading, database initialization and listener
+  app.ts                          Express middleware and route registration
+  db/database.ts                  SQLite setup, migrations and restore operations
+  db/migrations/001_initial.sql   Initial versioned schema
+  schemas/business.ts             Zod validation schemas
+  routes/email.routes.ts          Existing email API with runtime payload validation
+  routes/business.routes.ts       Business data, dashboard and backup API
+  services/html.service.ts        Server re-export of the shared HTML generator
+  services/mail.service.ts        Gmail SMTP transport
+  business.test.ts                API and database tests using temporary data
+```
+
+Frontend components call typed local API helpers and do not run SQL. The server uses parameterized SQL through `better-sqlite3`. Express middleware includes Helmet, CORS, rate limiting, and Origin/Host checks for state-changing methods. Zod validates untrusted business and email request payloads.
+
+## Database and business rules
+
+The SQLite file is local and is never placed in `public/`, `src/`, or `dist/`. At startup the server creates the parent directory, enables foreign keys, uses WAL journaling and a five-second busy timeout, applies any pending versioned migrations, then checks SQLite and foreign-key integrity before listening. Migration versions and application timestamps are stored in `schema_migrations`. Migrations are additive/versioned; startup does not reset existing data.
+
+Migration **001** creates these tables:
+
+| Table | Purpose |
+| --- | --- |
+| `clients` | Client contact information, unique client reference, timestamps, and archive marker. |
+| `quotations` | Client relationship, unique quotation reference, status, dates, currency, terms, notes, and server-calculated totals. |
+| `quotation_items` | Separate line items with quantity, paise unit price, calculated line total, and sort order. |
+| `orders` | Client relationship, optional unique source quotation, copied project description and agreed amount, requirements, status, priority, and delivery dates. |
+| `payments` | Order-linked payment entries with amount, date, method, reference, and notes. |
+| `tasks` | Tasks that can stand alone or reference an order, with status, priority, and due date. |
+
+Foreign keys preserve historical relationships. Clients can be archived instead of deleted. Quotations retain their own line items, and converting one copies its title, description, currency, and agreed total into the order so later quotation status changes do not rewrite the order amount.
+
+### Currency and quotation calculations
+
+Amounts are stored as integer minor units. For INR, one unit is one paise. The API calculates all quotation values; it ignores client-supplied totals.
+
+- A line total is `Math.round(quantity × unit_price_minor)`.
+- The subtotal is the sum of line totals.
+- Percentage discount is `Math.round(subtotal_minor × percentage ÷ 100)`.
+- Fixed `discount_value` is submitted in rupees and converted to paise with `Math.round(discount_value × 100)`.
+- Quantities and prices cannot be negative; percentages cannot exceed 100%; discounts cannot exceed the subtotal; unsafe or invalid totals are rejected.
+- Tax is stored as zero in this milestone. Tax calculation is not implemented.
+
+### Statuses and transitions
+
+- Quotation: `draft`, `sent`, `accepted`, `rejected`, `expired`, `cancelled`.
+- Order: `new`, `confirmed`, `in_progress`, `client_review`, `revisions`, `ready_for_delivery`, `delivered`, `on_hold`, `cancelled`, `closed`.
+- Task: `pending`, `in_progress`, `completed`, `cancelled`.
+- Priority: `low`, `normal`, `high`, `urgent`.
+
+Quotation conversion is transactional and unique by source quotation. It returns the existing order if the same quotation is submitted for conversion again. Only an accepted quotation converts by default. An API caller must explicitly send `{"confirm_unaccepted":true}` to override that rule. Payments cannot exceed the current outstanding amount. Outstanding balances are derived from payment records; delivery does not mark an order as paid.
+
+Date-only values use `YYYY-MM-DD`; stored timestamps use ISO 8601. References are generated locally (for example `CL-YYYYMMDD-...`, `QT-YYYYMMDD-...`, and `OR-YYYYMMDD-...`).
+
+## HTTP API
+
+The API base is `http://127.0.0.1:5000/api` when running directly; frontend code uses the Vite `/api` proxy. JSON validation errors return a JSON object with an `error` message. IDs are UUIDs.
+
+### Health and dashboard
+
+| Method | Path | Result |
+| --- | --- | --- |
+| `GET` | `/health` | API health and service name. |
+| `GET` | `/dashboard` | Counts, outstanding amount in paise, and upcoming open tasks from actual records. |
+
+### Clients
+
+| Method | Path | Result |
+| --- | --- | --- |
+| `GET` | `/clients` | List non-archived clients. |
+| `POST` | `/clients` | Create a client. Required: `name`; optional: `company_name`, `email`, `phone`, `address`, `notes`. |
+| `PATCH` | `/clients/:id/archive` | Archive an active client. |
 
 Example:
 
-```env
-GMAIL_USER=studio@example.com
-GMAIL_APP_PASSWORD=abcdefghijklmnop
-PORT=5000
-CLIENT_URL=http://localhost:5173
+```json
+{
+  "name": "A Client",
+  "company_name": "Example Studio",
+  "email": "client@example.com",
+  "phone": "+91 90000 00000",
+  "address": "Mumbai, India",
+  "notes": "Prefers email updates"
+}
 ```
 
-Do not include spaces, quotation marks, or the App Password in source control, screenshots, issue reports, or chat messages.
+### Quotations
 
-## 9. Running the Frontend and Backend
-
-### Recommended development command
-
-```powershell
-npm run dev
-```
-
-This runs:
-
-```text
-vite
-tsx watch server/index.ts
-```
-
-Open the frontend at `http://localhost:5173`.
-
-### Run the backend only
-
-```powershell
-npm run start
-```
-
-The backend listens on `http://localhost:5000` by default.
-
-### Run the frontend only
-
-```powershell
-npm run preview
-```
-
-Run `npm run build` first. `npm run preview` serves the built Vite frontend; it does not start the Express API.
-
-If Vite reports that port 5173 is busy, it may choose another frontend port. Update `CLIENT_URL` to match that browser origin if the browser then reports a CORS error. The Vite development proxy targets the API at `http://localhost:5000`.
-
-## 10. Using the Email Builder
-
-1. Start the project with `npm run dev`.
-2. Open the Vite URL shown in the terminal.
-3. Confirm the From panel shows the connected Gmail account.
-4. Enter one or more addresses in **To**. Separate multiple addresses with commas.
-5. Optionally enter CC and BCC recipients.
-6. Enter a subject.
-7. Enter the greeting and email title.
-8. Write the body using the rich-text editor.
-9. Add sections when the message needs additional content.
-10. Add tables, images, CTA buttons, dividers, or lists inside sections as needed.
-11. Enter the closing and signature.
-12. Add attachments by browsing or dropping files into the attachment area.
-13. Review the live preview in Desktop or Mobile mode.
-14. Use HTML mode to inspect the generated markup or copy it with **Copy HTML**.
-15. Check the displayed HTML size. The UI warns when it exceeds 90 KB.
-16. Use **Save draft** when you want an explicit local save. Draft changes also autosave to `localStorage`.
-17. Use **Send test** to send the message to the connected Gmail account.
-18. Use **Send email** to send it to the entered recipients.
-19. After a successful send, review the recipient, subject, and timestamp in the confirmation dialog.
-
-## 11. Rich-Text Editing and Shortcuts
-
-The body and paragraph blocks use a lightweight `contentEditable` editor. Formatting is applied directly while writing.
-
-Toolbar controls include:
-
-- Bold
-- Italic
-- Underline
-- Bulleted list
-- Numbered list
-- Left, center, and right alignment
-- Text size
-- Text color
-- Link insertion
-
-Keyboard shortcuts:
-
-| Shortcut | Action |
-| --- | --- |
-| `Ctrl+B` or `Cmd+B` | Bold |
-| `Ctrl+I` or `Cmd+I` | Italic |
-| `Ctrl+U` or `Cmd+U` | Underline |
-
-The editor stores the resulting markup in the draft. The HTML service keeps a restricted allowlist of formatting tags and converts supported font markup to inline styles before delivery.
-
-## 12. Sections, Tables, Attachments, and HTML Preview
-
-### Sections
-
-Use **Add section** to create a new section. Each section has a heading and editable content blocks. Section controls support:
-
-- Move up
-- Move down
-- Duplicate
-- Delete
-
-Available blocks are:
-
-- Paragraph
-- Bullet or numbered list
-- Image by HTTP(S) URL
-- CTA button
-- Divider
-- Table
-
-### Tables
-
-The table editor supports:
-
-- Adding and removing rows
-- Adding and removing columns
-- Editing each cell
-- Enabling a header row
-- Text color
-- Header background color
-- Border color
-- Cell padding
-
-Tables are generated as HTML tables with inline cell styles. The same generated table markup is used in the live preview and the message sent to Gmail.
-
-### Attachments
-
-Attachments are submitted as `multipart/form-data`. The current limits are:
-
-- Maximum 10 files per request.
-- Maximum 10 MB per file.
-- Files are stored in memory only for the request.
-- Files are not persisted to disk or a database.
-
-The browser displays the filename, size, and remove control before sending.
-
-### HTML Preview
-
-The Preview tab renders the generated HTML in an iframe. The HTML tab shows the generated source. The **Copy HTML** button copies that source to the clipboard.
-
-The generated email uses table-based layout and inline styles. It does not require JavaScript, CSS Grid, Flexbox, or an external stylesheet inside the delivered email.
-
-## 13. Gmail HTML and CID Logo Handling
-
-The browser preview receives the Vite-resolved JSN logo asset. The backend does not send a local file path or a base64 data URI.
-
-Before delivery, `server/routes/email.routes.ts` reads `src/assets/JSN DESIGN.png` and adds it to the Nodemailer message as:
-
-```text
-filename: JSN-DESIGN.png
-cid: jsn-logo
-```
-
-The generated email references it as:
-
-```html
-<img src="cid:jsn-logo" ...>
-```
-
-This lets Gmail resolve the logo as an inline related attachment. The email generator escapes user text, restricts rich-text tags, validates HTTP(S) links, and uses compact inline email markup.
-
-## 14. Email Sending and Testing Workflow
-
-The frontend sends a `FormData` request containing:
-
-- `payload`: JSON-encoded draft data.
-- `attachments`: zero or more uploaded files.
-
-The API then:
-
-1. Parses the draft payload.
-2. Validates recipients and subject.
-3. Sanitizes uploaded filenames.
-4. Adds the JSN logo as the `jsn-logo` CID attachment.
-5. Generates the final HTML.
-6. Sends with Nodemailer through:
-
-```text
-Host: smtp.gmail.com
-Port: 465
-Secure: true
-```
-
-For **Send test**, the frontend targets the configured Gmail account returned by the config endpoint. For **Send email**, it uses the entered To, CC, and BCC values.
-
-Available API routes:
-
-| Method | Route | Behavior |
+| Method | Path | Result |
 | --- | --- | --- |
-| `GET` | `/api/health` | Returns server health. |
-| `GET` | `/api/email/config` | Returns connection status and Gmail address only. |
-| `POST` | `/api/email/test` | Sends a test message through Gmail. |
-| `POST` | `/api/email/send` | Sends a message to entered recipients. |
+| `GET` | `/quotations` | List quotations with client names. |
+| `POST` | `/quotations` | Create a quotation and its line items; server calculates line, subtotal, discount, and total amounts. |
+| `GET` | `/quotations/:id` | Read one quotation and its line items. |
+| `PATCH` | `/quotations/:id/status` | Set a quotation status. JSON: `{"status":"accepted"}`. |
+| `POST` | `/quotations/:id/convert` | Convert an accepted quotation. JSON body may be `{}`; optional explicit override: `{"confirm_unaccepted":true}`. |
 
-## 15. Troubleshooting and Common Errors
+Example creation request (unit prices are paise; fixed discount value is rupees):
 
-### `Gmail is not configured`
-
-- Confirm `.env` exists next to `package.json`.
-- Check that both `GMAIL_USER` and `GMAIL_APP_PASSWORD` are populated.
-- Restart `npm run dev` after changing `.env`.
-- Check `GET http://localhost:5000/api/email/config`.
-
-### Gmail rejects the credentials
-
-- Use a Google App Password, not the normal Gmail password.
-- Confirm 2-Step Verification is enabled.
-- Confirm the App Password belongs to the account in `GMAIL_USER`.
-- Make sure the account is allowed to use SMTP under its organization policy.
-
-### `EADDRINUSE` or “port already in use”
-
-Another process is using port 5000 or 5173. Stop the old development process or change `PORT` for Express. If the frontend moves to another port, set `CLIENT_URL` to the new browser origin and restart.
-
-On Windows, identify listeners with:
-
-```powershell
-Get-NetTCPConnection -LocalPort 5000,5173 -State Listen
+```json
+{
+  "client_id": "00000000-0000-4000-8000-000000000001",
+  "title": "Brand identity",
+  "description": "Logo and visual identity package",
+  "items": [
+    { "description": "Logo design", "quantity": 1, "unit_price_minor": 250000 },
+    { "description": "Brand guide", "quantity": 1, "unit_price_minor": 100000 }
+  ],
+  "discount_type": "percentage",
+  "discount_value": 10,
+  "issue_date": "2026-10-09",
+  "valid_until": "2026-11-09",
+  "terms": "Two revision rounds included",
+  "notes": ""
+}
 ```
 
-### CORS errors
+`discount_type` is `none`, `fixed`, or `percentage`; `discount_value` defaults to zero. `items` must contain at least one item. The example client ID must be replaced with a real client ID returned by `POST /clients`.
 
-Set `CLIENT_URL` to the exact frontend origin, including the port:
+### Orders, payments, and tasks
 
-```env
-CLIENT_URL=http://localhost:5173
+| Method | Path | Result |
+| --- | --- | --- |
+| `GET` | `/orders` | List orders with client names and derived paid/outstanding paise amounts. |
+| `POST` | `/orders` | Create an order directly. Required: `client_id`, `title`, `agreed_amount_minor`; optional: description, requirements, priority, order date, due date. |
+| `PATCH` | `/orders/:id/status` | Change order status. Setting `delivered` records `delivered_at`. |
+| `GET` | `/orders/:id/payments` | List an order's payments. |
+| `POST` | `/orders/:id/payments` | Record a payment. `amount_minor` is required; amount cannot exceed outstanding balance. |
+| `GET` | `/tasks` | List tasks, including linked order reference where present. |
+| `POST` | `/tasks` | Create an independent or order-linked task. Required: `title`; optional: `order_id`, description, status, priority, due date. |
+| `PATCH` | `/tasks/:id/status` | Change task status. Completing a task records its completion timestamp. |
+
+Payment example:
+
+```json
+{
+  "amount_minor": 50000,
+  "payment_date": "2026-10-09",
+  "payment_method": "Bank transfer",
+  "reference": "TXN-12345",
+  "notes": "Advance payment"
+}
 ```
 
-Then restart the backend.
+This records ₹500.00. Payments inherit the order currency; this milestone defaults to INR.
 
-### Attachments are rejected
+### Backups and email
 
-Check that each file is 10 MB or smaller and that no more than 10 files are selected.
+| Method | Path | Result |
+| --- | --- | --- |
+| `GET` | `/backup` | Create a consistent SQLite snapshot in `BACKUP_DIR` and return it as a download. |
+| `POST` | `/restore` | Restore one SQLite file uploaded as multipart field `backup` (maximum 200 MB). |
+| `GET` | `/email/config` | Return connection status and configured sender address, never the App Password. |
+| `POST` | `/email/test` | Send the current email payload to the configured sender address. |
+| `POST` | `/email/send` | Send the current email payload to its To recipients. |
 
-### The Gmail message is clipped or the logo is missing
+Email endpoints retain the editor's multipart request format: JSON content in form field `payload`, and zero or more uploaded files in `attachments`. To, CC, and BCC addresses and the subject are validated by the server. Attachment filenames are normalized before sending. No real email is sent by the automated test suite.
 
-- Check the HTML size displayed in the preview.
-- Remove unnecessary large images or content when the size warning appears.
-- Confirm the message was sent through the current backend process after code or `.env` changes.
-- Confirm the logo is sent with CID `jsn-logo`, not as a local filesystem path.
-- Use Gmail’s “Show original” or the HTML preview to inspect the delivered structure.
+## Backup and restore
 
-### HTML preview does not update
+1. Open **Settings** and choose **Download database backup**. SQLite creates a consistent snapshot; the API stores a dated `.sqlite` file in `BACKUP_DIR` and streams it to the browser.
+2. Keep the downloaded backup in a private location outside the repository. Backups contain client and financial records.
+3. To restore, select a backup file in Settings and choose **Restore backup**. The API accepts one file up to 200 MB and checks SQLite integrity, foreign-key integrity, schema version, and required tables before replacing the active database.
+4. Before replacement, the current database is retained beside the active file as `business.sqlite.recovery-<timestamp>`. If replacement cannot complete, the API attempts to restore the prior file. After a successful restore, verify the displayed records and retain the recovery file until satisfied.
 
-Refresh the browser and confirm the Vite process is running. Draft data is stored in `localStorage`; use **Clear draft** if an old draft has incompatible data.
+Restore accepts backups produced with this schema version. Restoring an older backup replaces the current business data with the contents of that backup. Take a fresh backup first if you may need the current records.
 
-## 16. Security Notes
+## Security and privacy
 
-- `.env` is ignored by Git. Never commit Gmail credentials.
-- The Gmail App Password is read only by the backend.
-- `/api/email/config` never returns the App Password.
-- Helmet is enabled for security headers.
-- CORS is restricted to `CLIENT_URL`.
-- Express requests are rate-limited to 60 requests per 15-minute window.
-- JSON request bodies are limited to 1 MB.
-- Multipart uploads are limited to 10 files and 10 MB per file.
-- Uploaded filenames are sanitized before being passed to Nodemailer.
-- Recipients are checked against a basic email pattern.
-- Subjects must be present and are limited to 200 characters.
-- User text is escaped or passed through a small rich-text allowlist before email generation.
-- CTA and image URLs accept only HTTP(S) URLs; unsupported schemes become `#`.
-- Attachments remain in memory for the request and are not persisted.
-- There is currently no user authentication or authorization layer. Keep this application on a trusted internal network or behind an appropriate access-control layer before exposing it beyond the intended internal users.
+- By default, Express listens only on `127.0.0.1` and Vite binds its local development server. The application has no authentication, user accounts, or authorization model.
+- CORS is limited to `CLIENT_URL`; state-changing requests validate supplied Origin and loopback Host values. Helmet security headers and a 60-request-per-15-minute rate limit are enabled.
+- SQL values are passed as parameters. Business request bodies are validated at runtime. Database files and backups are not served by Vite.
+- Gmail credentials stay in the backend environment. Email attachment bytes are held in memory for the request and are not kept as a permanent upload archive.
+- `.env`, SQLite/database files, backup files, and upload data are excluded by `.gitignore`. Check the ignore rules before storing any custom data path inside the repository.
 
-## 17. Production and Deployment Notes
+This app is designed for one trusted local user. Loopback binding is not a substitute for authentication or operating-system account security. Do not change `HOST` to a network-facing address or expose the API to an untrusted network. Do not commit or share database backups casually.
 
-The repository provides development and build scripts but does not include a production reverse proxy, process manager, hosting configuration, or authentication system.
+## Build and tests
 
-For a production deployment:
-
-1. Build the frontend:
-
-   ```powershell
-   npm run build
-   ```
-
-2. Run the Express server with production environment variables:
-
-   ```powershell
-   npm run start
-   ```
-
-3. Serve the generated `dist/` frontend through a web server or static hosting service.
-4. Proxy `/api` requests to the Express server.
-5. Set `CLIENT_URL` to the exact HTTPS frontend origin.
-6. Store Gmail credentials in the deployment secret manager or protected environment, not in the repository.
-7. Use HTTPS for the frontend and API.
-8. Keep the app behind trusted access control because the current application has no built-in authentication.
-9. Monitor SMTP failures, rate-limit responses, memory usage during attachment uploads, and email size.
-
-The current server binds with Express’s default host behavior and starts on `PORT`. No production static-file serving is configured in `server/index.ts`.
-
-## 18. Useful npm Commands
+Run from the project root:
 
 ```powershell
-# Install dependencies
-npm install
-
-# Run Vite and Express together with file watching
-npm run dev
-
-# Type-check and build the frontend
 npm run build
-
-# Start only the Express TypeScript server
-npm run start
-
-# Preview the built Vite frontend
-npm run preview
-
-# Check production dependency vulnerabilities
-npm audit --omit=dev --audit-level=high
+npm test
 ```
 
-Useful API checks while the backend is running:
+`npm run build` runs the TypeScript project build and Vite production build. `npm test` runs Node's test runner through `tsx`, using a temporary SQLite database and temporary backup files. Coverage includes:
 
-```powershell
-Invoke-WebRequest -UseBasicParsing http://localhost:5000/api/health
-Invoke-WebRequest -UseBasicParsing http://localhost:5000/api/email/config
-```
+- New database initialization, repeatable migration, foreign-key enforcement, integrity checks, and empty dashboard aggregation.
+- Client input validation and email normalization.
+- Quotation percentage and fixed discounts, paise rounding, negative/invalid values, and backend total calculations.
+- Accepted-quotation conversion, rejection of unaccepted conversion by default, and duplicate conversion prevention.
+- Payment balance calculations and overpayment rejection; task creation and status updates.
+- Database-backed dashboard aggregation, snapshot backup, invalid-backup rejection, successful restore, and recovery-file preservation.
+- Existing generated email HTML and email API input validation/config secrecy.
 
-The second response contains only connection status and the Gmail address. Do not print or share `.env` contents.
+Tests do not use the normal `%LOCALAPPDATA%` business database and do not send real email. A production dependency security scan can be run with `npm audit --omit=dev`; the complete dependency tree can be inspected with `npm audit`.
 
-## 19. Final Project Structure
+## Troubleshooting
 
-```text
-JSN Mail Studio
-├─ Frontend
-│  ├─ index.html
-│  ├─ src/App.tsx
-│  ├─ src/main.tsx
-│  ├─ src/assets/JSN DESIGN.png
-│  ├─ src/services/html.service.ts
-│  ├─ src/types/email.ts
-│  ├─ src/styles.css
-│  └─ src/styles-extensions.css
-├─ Backend
-│  ├─ server/index.ts
-│  ├─ server/routes/email.routes.ts
-│  ├─ server/services/html.service.ts
-│  └─ server/services/mail.service.ts
-├─ Configuration
-│  ├─ package.json
-│  ├─ vite.config.ts
-│  ├─ tsconfig.json
-│  ├─ tsconfig.app.json
-│  ├─ tsconfig.node.json
-│  ├─ tailwind.config.js
-│  ├─ postcss.config.js
-│  ├─ .env.example
-│  └─ .gitignore
-└─ Documentation
-   └─ README.md
-```
+### Port 5000 or 5173 is already in use
 
-This README describes the current repository behavior and should be updated when scripts, routes, environment variables, upload limits, or email-generation behavior change.
+Stop the other process or change `PORT` for Express. If you change the Vite port, update `CLIENT_URL` to the corresponding origin and restart both processes. The Vite proxy target is configured in `vite.config.ts` and must continue to point to the Express port.
+
+### The dashboard says records are unavailable
+
+Confirm `npm run dev` is still running and that the API started successfully. Check the terminal for SQLite initialization errors. If using a custom `DATABASE_PATH`, make sure its parent directory is writable and that the file is a valid SQLite database.
+
+### Gmail shows as not connected or sending fails
+
+Confirm `GMAIL_USER` and `GMAIL_APP_PASSWORD` are set in `.env`, that the account permits SMTP access, and that the App Password is current. Restart the API after editing `.env`. The UI reports the configured sender address, not the password.
+
+### Restore reports an invalid backup
+
+Choose a complete SQLite backup generated by this application. A renamed file is not necessarily a valid backup. Confirm the file is below the 200 MB upload limit. A rejected backup is not installed; the active database remains in use.
+
+### The frontend loads but API calls fail in preview
+
+`npm run preview` serves only `dist`; it does not run the API or configure the development proxy. Start the API separately and configure a frontend server/proxy for `/api` if you use a non-development deployment.
+
+## Milestone 2 scope
+
+Planned follow-on work includes full quotation creation and editing screens, quotation item management and lifecycle actions, project detail and workflow screens, payment/task entry interfaces, and AI-assisted editable email generation. PDF generation, tax calculation, user authentication, and multi-user deployment are outside this milestone.

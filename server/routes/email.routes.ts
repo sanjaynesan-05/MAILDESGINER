@@ -1,36 +1,114 @@
-import { Router } from 'express';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import multer from 'multer';
-import { generateEmailHtml } from '../services/html.service.ts';
-import { gmailUser, isConfigured, sendMail } from '../services/mail.service.ts';
+import { Router } from "express";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import multer from "multer";
+import { z } from "zod";
+import { generateEmailHtml } from "../services/html.service.ts";
+import { gmailUser, isConfigured, sendMail } from "../services/mail.service.ts";
+import type { EmailDraft } from "../../src/types/email.ts";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { files: 10, fileSize: 10 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 10, fileSize: 10 * 1024 * 1024 },
+});
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const logoBuffer = readFileSync(fileURLToPath(new URL('../../src/assets/JSN DESIGN.png', import.meta.url)));
-const list = (value: unknown) => typeof value === 'string' ? value.split(',').map((item) => item.trim()).filter(Boolean) : [];
+const emailPayloadSchema = z
+  .object({
+    to: z.string().max(2000),
+    cc: z.string().max(2000).optional(),
+    bcc: z.string().max(2000).optional(),
+    subject: z.string().trim().min(1).max(200),
+    greeting: z.string().optional(),
+    title: z.string().optional(),
+    body: z.string().optional(),
+    closing: z.string().optional(),
+    signature: z.string().optional(),
+    sections: z.array(z.unknown()).optional(),
+  })
+  .passthrough();
+const logoBuffer = readFileSync(
+  fileURLToPath(new URL("../../src/assets/JSN DESIGN.png", import.meta.url)),
+);
+const list = (value: unknown) =>
+  typeof value === "string"
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 
-router.get('/config', (_request, response) => response.json({ connected: isConfigured, gmailUser: isConfigured ? gmailUser : null }));
+router.get("/config", (_request, response) =>
+  response.json({
+    connected: isConfigured,
+    gmailUser: isConfigured ? gmailUser : null,
+  }),
+);
 
-const handleSend = (test: boolean) => [upload.array('attachments', 10), async (request: any, response: any) => {
-  try {
-    const payload = JSON.parse(request.body.payload || '{}');
-    const recipients = list(payload.to);
-    if (!recipients.length || !recipients.every((email) => emailPattern.test(email))) return response.status(400).json({ error: 'Enter at least one valid recipient.' });
-    if (typeof payload.subject !== 'string' || !payload.subject.trim() || payload.subject.length > 200) return response.status(400).json({ error: 'A subject between 1 and 200 characters is required.' });
-    if (test && !isConfigured) return response.status(503).json({ error: 'Gmail is not configured for test sending.' });
-    const files: { filename: string; content: Buffer; contentType: string; cid?: string }[] = (request.files || []).map((file: any) => ({ filename: file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'), content: file.buffer, contentType: file.mimetype }));
-    // Logo embedded inline via CID reference — must include cid property for nodemailer to embed
-    files.push({ filename: 'JSN-DESIGN.png', content: logoBuffer, contentType: 'image/png', cid: 'jsn-logo' });
-    await sendMail({ to: recipients.join(', '), cc: list(payload.cc).join(', ') || undefined, bcc: list(payload.bcc).join(', ') || undefined, subject: payload.subject.trim(), html: generateEmailHtml(payload, 'cid:jsn-logo'), attachments: files });
-    return response.json({ ok: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to send email';
-    return response.status(message.startsWith('Gmail is not') ? 503 : 400).json({ error: message });
-  }
-}];
+const handleSend = (test: boolean) => [
+  upload.array("attachments", 10),
+  async (request: any, response: any) => {
+    try {
+      const raw = JSON.parse(request.body.payload || "{}");
+      const validation = emailPayloadSchema.safeParse(raw);
+      if (!validation.success)
+        return response.status(400).json({
+          error:
+            validation.error.issues[0]?.message || "Invalid email payload.",
+        });
+      const payload = validation.data as unknown as EmailDraft;
+      const recipients = list(payload.to);
+      const cc = list(payload.cc),
+        bcc = list(payload.bcc);
+      if (
+        !recipients.length ||
+        ![...recipients, ...cc, ...bcc].every((email) =>
+          emailPattern.test(email),
+        )
+      )
+        return response
+          .status(400)
+          .json({ error: "Enter valid email addresses for To, CC, and BCC." });
+      if (test && !isConfigured)
+        return response
+          .status(503)
+          .json({ error: "Gmail is not configured for test sending." });
+      const files: {
+        filename: string;
+        content: Buffer;
+        contentType: string;
+        cid?: string;
+      }[] = (request.files || []).map((file: any) => ({
+        filename: file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_"),
+        content: file.buffer,
+        contentType: file.mimetype,
+      }));
+      // Logo embedded inline via CID reference — must include cid property for nodemailer to embed
+      files.push({
+        filename: "JSN-DESIGN.png",
+        content: logoBuffer,
+        contentType: "image/png",
+        cid: "jsn-logo",
+      });
+      await sendMail({
+        to: recipients.join(", "),
+        cc: list(payload.cc).join(", ") || undefined,
+        bcc: list(payload.bcc).join(", ") || undefined,
+        subject: payload.subject.trim(),
+        html: generateEmailHtml(payload, "cid:jsn-logo"),
+        attachments: files,
+      });
+      return response.json({ ok: true });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to send email";
+      return response
+        .status(message.startsWith("Gmail is not") ? 503 : 400)
+        .json({ error: message });
+    }
+  },
+];
 
-router.post('/test', ...handleSend(true) as any);
-router.post('/send', ...handleSend(false) as any);
+router.post("/test", ...(handleSend(true) as any));
+router.post("/send", ...(handleSend(false) as any));
 export default router;

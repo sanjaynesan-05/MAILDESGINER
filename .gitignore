@@ -3,3 +3,10 @@ dist
 .env
 uploads
 *.log
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+backups/
