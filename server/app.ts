@@ -13,7 +13,7 @@ export function createApp() {
     cors({
       origin: clientUrl,
       allowedHeaders: ["Content-Type"],
-      methods: ["GET", "POST", "PATCH", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
     }),
   );
   app.use((req, res, next) => {

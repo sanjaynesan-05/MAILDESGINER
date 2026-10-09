@@ -15,6 +15,7 @@ import {
   orderStatusSchema,
   paymentSchema,
   quotationSchema,
+  businessProfileSchema,
   taskSchema,
   taskStatusSchema,
 } from "../schemas/business.ts";
@@ -124,15 +125,12 @@ router.patch("/clients/:id/archive", (req, res) => {
     : bad(res, "Client not found.", 404);
 });
 
-router.get("/quotations", (_req, res) =>
-  res.json(
-    getDatabase()
-      .prepare(
-        `SELECT q.*,c.name client_name FROM quotations q JOIN clients c ON c.id=q.client_id ORDER BY q.created_at DESC`,
-      )
-      .all(),
-  ),
-);
+router.get("/quotations", (req, res) => {
+  const query = z.object({ status: z.enum(["draft", "sent", "accepted", "rejected", "expired", "cancelled"]).optional(), from: z.string().date().optional(), to: z.string().date().optional(), search: z.string().trim().max(200).optional() }).safeParse(req.query);
+  if (!query.success) return bad(res, "Invalid quotation filters.");
+  const { status, from, to, search = "" } = query.data;
+  res.json(getDatabase().prepare(`SELECT q.*,c.name client_name,o.id converted_order_id,o.order_number converted_order_number FROM quotations q JOIN clients c ON c.id=q.client_id LEFT JOIN orders o ON o.quotation_id=q.id WHERE (? IS NULL OR q.status=?) AND (? IS NULL OR q.issue_date>=?) AND (? IS NULL OR q.issue_date<=?) AND (?='' OR q.quotation_number LIKE ? OR c.name LIKE ? OR q.title LIKE ? OR COALESCE(q.description,'') LIKE ?) ORDER BY q.created_at DESC`).all(status ?? null,status ?? null,from ?? null,from ?? null,to ?? null,to ?? null,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`));
+});
 router.post("/quotations", (req, res) => {
   const input = parsed(quotationSchema, req.body);
   if (!input.success)
@@ -208,6 +206,7 @@ router.post("/quotations", (req, res) => {
           stamp,
         ),
       );
+      db.prepare("INSERT INTO quotation_status_history(id,quotation_id,previous_status,new_status,changed_at,metadata) VALUES(?,?,?,?,?,?)").run(randomUUID(), id, null, "draft", stamp, null);
     })();
   } catch (e) {
     return bad(
@@ -227,11 +226,120 @@ router.post("/quotations", (req, res) => {
       .all(id),
   });
 });
+router.put("/quotations/:id", (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  const input = parsed(quotationSchema, req.body);
+  if (!id.success) return bad(res, "Invalid quotation id.");
+  if (!input.success)
+    return bad(res, input.error.issues[0]?.message || "Invalid quotation.");
+  const db = getDatabase();
+  const existing = db
+    .prepare("SELECT status FROM quotations WHERE id=?")
+    .get(id.data) as { status: string } | undefined;
+  if (!existing) return bad(res, "Quotation not found.", 404);
+  if (existing.status !== "draft") return bad(res, "Only draft quotations can be edited. Duplicate this quotation to make a new draft.", 409);
+  if (db.prepare("SELECT 1 FROM orders WHERE quotation_id=?").get(id.data))
+    return bad(
+      res,
+      "A quotation converted to an order can no longer be edited.",
+      409,
+    );
+  const d = input.data;
+  const itemTotals = d.items.map((item) =>
+    Math.round(item.quantity * item.unit_price_minor),
+  );
+  if (itemTotals.some((amount) => !Number.isSafeInteger(amount)))
+    return bad(res, "Line item amount is too large.");
+  const subtotal = itemTotals.reduce((sum, amount) => sum + amount, 0);
+  if (!Number.isSafeInteger(subtotal))
+    return bad(res, "Quotation amount is too large.");
+  const discount =
+    d.discount_type === "percentage"
+      ? Math.round((subtotal * d.discount_value) / 100)
+      : d.discount_type === "fixed"
+        ? Math.round(d.discount_value * 100)
+        : 0;
+  if (d.discount_type === "fixed" && discount > subtotal)
+    return bad(res, "Fixed discount cannot exceed the subtotal.");
+  const total = subtotal - discount;
+  if (![discount, total].every(Number.isSafeInteger) || total < 0)
+    return bad(res, "Quotation amount is invalid.");
+  const stamp = now();
+  try {
+    db.transaction(() => {
+      if (
+        !db
+          .prepare("SELECT 1 FROM clients WHERE id=? AND archived_at IS NULL")
+          .get(d.client_id)
+      )
+        throw new Error("CLIENT_NOT_FOUND");
+      db.prepare(
+        `UPDATE quotations SET client_id=?,title=?,description=?,subtotal_minor=?,discount_type=?,discount_value=?,discount_minor=?,total_minor=?,issue_date=?,valid_until=?,terms=?,notes=?,updated_at=? WHERE id=?`,
+      ).run(
+        d.client_id,
+        d.title,
+        d.description || null,
+        subtotal,
+        d.discount_type,
+        d.discount_value,
+        discount,
+        total,
+        d.issue_date || today(),
+        d.valid_until || null,
+        d.terms || null,
+        d.notes || null,
+        stamp,
+        id.data,
+      );
+      db.prepare("DELETE FROM quotation_items WHERE quotation_id=?").run(
+        id.data,
+      );
+      const insert = db.prepare(
+        "INSERT INTO quotation_items(id,quotation_id,description,quantity,unit_price_minor,line_total_minor,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+      );
+      d.items.forEach((item, index) =>
+        insert.run(
+          randomUUID(),
+          id.data,
+          item.description,
+          item.quantity,
+          item.unit_price_minor,
+          itemTotals[index],
+          index,
+          stamp,
+          stamp,
+        ),
+      );
+    })();
+  } catch (error) {
+    return bad(
+      res,
+      error instanceof Error && error.message === "CLIENT_NOT_FOUND"
+        ? "Client not found."
+        : "Unable to update quotation.",
+      error instanceof Error && error.message === "CLIENT_NOT_FOUND"
+        ? 404
+        : 500,
+    );
+  }
+  return res.json({
+    ...(db
+      .prepare("SELECT * FROM quotations WHERE id=?")
+      .get(id.data) as object),
+    items: db
+      .prepare(
+        "SELECT * FROM quotation_items WHERE quotation_id=? ORDER BY sort_order",
+      )
+      .all(id.data),
+  });
+});
 router.get("/quotations/:id", (req, res) => {
   const id = z.string().uuid().safeParse(req.params.id);
   if (!id.success) return bad(res, "Invalid quotation id.");
   const q = getDatabase()
-    .prepare("SELECT * FROM quotations WHERE id=?")
+    .prepare(
+      "SELECT q.*,c.name client_name,o.id converted_order_id,o.order_number converted_order_number FROM quotations q JOIN clients c ON c.id=q.client_id LEFT JOIN orders o ON o.quotation_id=q.id WHERE q.id=?",
+    )
     .get(id.data);
   if (!q) return bad(res, "Quotation not found.", 404);
   res.json({
@@ -241,6 +349,7 @@ router.get("/quotations/:id", (req, res) => {
         "SELECT * FROM quotation_items WHERE quotation_id=? ORDER BY sort_order",
       )
       .all(id.data),
+    status_history: getDatabase().prepare("SELECT previous_status,new_status,changed_at,metadata FROM quotation_status_history WHERE quotation_id=? ORDER BY changed_at").all(id.data),
   });
 });
 router.patch("/quotations/:id/status", (req, res) => {
@@ -259,12 +368,60 @@ router.patch("/quotations/:id/status", (req, res) => {
       .safeParse(req.body);
   if (!id.success || !body.success)
     return bad(res, "Invalid quotation status request.");
-  const info = getDatabase()
-    .prepare("UPDATE quotations SET status=?,updated_at=? WHERE id=?")
-    .run(body.data.status, now(), id.data);
-  return info.changes
-    ? res.json({ ok: true, status: body.data.status })
-    : bad(res, "Quotation not found.", 404);
+  const db = getDatabase();
+  if (
+    db
+      .prepare("SELECT 1 FROM orders WHERE quotation_id=?")
+      .get(id.data)
+  )
+    return bad(
+      res,
+      "A quotation converted to an order can no longer change status.",
+      409,
+    );
+  const transitions: Record<string, string[]> = { draft: ["sent", "cancelled"], sent: ["accepted", "rejected", "expired", "cancelled"] };
+  try {
+    const changed = db.transaction(() => {
+      const current = db.prepare("SELECT status FROM quotations WHERE id=?").get(id.data) as { status: string } | undefined;
+      if (!current) throw new Error("NOT_FOUND");
+      if (!transitions[current.status]?.includes(body.data.status)) throw new Error("INVALID_TRANSITION");
+      const stamp = now();
+      db.prepare("UPDATE quotations SET status=?,updated_at=? WHERE id=?").run(body.data.status, stamp, id.data);
+      db.prepare("INSERT INTO quotation_status_history(id,quotation_id,previous_status,new_status,changed_at,metadata) VALUES(?,?,?,?,?,?)").run(randomUUID(), id.data, current.status, body.data.status, stamp, null);
+      return { previous_status: current.status };
+    })();
+    return res.json({ ok: true, status: body.data.status, ...changed });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    return bad(res, message === "NOT_FOUND" ? "Quotation not found." : "That quotation status transition is not allowed.", message === "NOT_FOUND" ? 404 : 409);
+  }
+});
+
+router.post("/quotations/:id/duplicate", (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return bad(res, "Invalid quotation id.");
+  const db = getDatabase(), newId = randomUUID(), stamp = now();
+  try {
+    db.transaction(() => {
+      const source = db.prepare("SELECT * FROM quotations WHERE id=?").get(id.data) as any;
+      if (!source) throw new Error("NOT_FOUND");
+      db.prepare("INSERT INTO quotations(id,quotation_number,client_id,title,description,currency,subtotal_minor,discount_type,discount_value,discount_minor,tax_minor,total_minor,status,issue_date,valid_until,terms,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(newId,ref("QT"),source.client_id,source.title,source.description,source.currency,source.subtotal_minor,source.discount_type,source.discount_value,source.discount_minor,source.tax_minor,source.total_minor,"draft",today(),source.valid_until,source.terms,source.notes,stamp,stamp);
+      const items = db.prepare("SELECT * FROM quotation_items WHERE quotation_id=? ORDER BY sort_order").all(id.data) as any[];
+      const insert = db.prepare("INSERT INTO quotation_items(id,quotation_id,description,quantity,unit_price_minor,line_total_minor,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)");
+      for (const item of items) insert.run(randomUUID(),newId,item.description,item.quantity,item.unit_price_minor,item.line_total_minor,item.sort_order,stamp,stamp);
+      db.prepare("INSERT INTO quotation_status_history(id,quotation_id,previous_status,new_status,changed_at,metadata) VALUES(?,?,?,?,?,?)").run(randomUUID(),newId,null,"draft",stamp,JSON.stringify({ duplicated_from: id.data }));
+    })();
+  } catch (error) { return bad(res, error instanceof Error && error.message === "NOT_FOUND" ? "Quotation not found." : "Unable to duplicate quotation.", error instanceof Error && error.message === "NOT_FOUND" ? 404 : 500); }
+  return res.status(201).json(db.prepare("SELECT * FROM quotations WHERE id=?").get(newId));
+});
+
+router.get("/business-profile", (_req,res) => res.json(getDatabase().prepare("SELECT * FROM business_profile WHERE id=1").get()));
+router.put("/business-profile", (req,res) => {
+  const input = businessProfileSchema.safeParse(req.body);
+  if (!input.success) return bad(res,input.error.issues[0]?.message || "Invalid business profile.");
+  const d = input.data;
+  getDatabase().prepare("UPDATE business_profile SET business_name=?,contact_person=?,email=?,phone=?,address=?,website=?,default_terms=?,default_validity_days=?,currency='INR',updated_at=? WHERE id=1").run(d.business_name,d.contact_person,d.email,d.phone,d.address,d.website,d.default_terms,d.default_validity_days,now());
+  return res.json(getDatabase().prepare("SELECT * FROM business_profile WHERE id=1").get());
 });
 router.post("/quotations/:id/convert", (req, res) => {
   const db = getDatabase(),

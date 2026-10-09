@@ -3,6 +3,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -42,15 +43,19 @@ export function openDatabase(
       }[]
     ).map((r) => r.version),
   );
-  const migrate = db.transaction(() => {
-    if (!applied.has(1)) {
-      db.exec(readFileSync(join(migrationsDir, "001_initial.sql"), "utf8"));
+  const migrations = readdirSync(migrationsDir)
+    .filter((name) => /^\d+_.*\.sql$/.test(name))
+    .sort((a, b) => Number(a.slice(0, 3)) - Number(b.slice(0, 3)));
+  for (const name of migrations) {
+    const version = Number(name.slice(0, 3));
+    if (applied.has(version)) continue;
+    db.transaction(() => {
+      db.exec(readFileSync(join(migrationsDir, name), "utf8"));
       db.prepare(
         "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
-      ).run(1, new Date().toISOString());
-    }
-  });
-  migrate();
+      ).run(version, new Date().toISOString());
+    })();
+  }
   const integrity = db.pragma("integrity_check") as {
     integrity_check: string;
   }[];

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import EmailStudio from "./EmailStudio";
+import QuotationsPage from "./pages/QuotationsPage";
+import ProjectsPage from "./pages/ProjectsPage";
 import logoUrl from "./assets/JSN DESIGN.png";
 
 type Page =
@@ -32,25 +34,6 @@ type Client = {
   email: string | null;
   phone: string | null;
   created_at: string;
-};
-type Quotation = {
-  id: string;
-  quotation_number: string;
-  client_name: string;
-  title: string;
-  total_minor: number;
-  currency: string;
-  status: string;
-};
-type Order = {
-  id: string;
-  order_number: string;
-  client_name: string;
-  title: string;
-  agreed_amount_minor: number;
-  paid_minor: number;
-  outstanding_minor: number;
-  status: string;
 };
 type Stats = {
   clients: number;
@@ -122,8 +105,6 @@ export default function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
-  const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -167,26 +148,6 @@ export default function App() {
       setLoading(true);
       api<Client[]>("/api/clients")
         .then(setClients)
-        .catch((e) => {
-          setLoadError(e.message);
-          toast.error(e.message);
-        })
-        .finally(() => setLoading(false));
-    }
-    if (page === "quotations") {
-      setLoading(true);
-      api<Quotation[]>("/api/quotations")
-        .then(setQuotations)
-        .catch((e) => {
-          setLoadError(e.message);
-          toast.error(e.message);
-        })
-        .finally(() => setLoading(false));
-    }
-    if (page === "orders") {
-      setLoading(true);
-      api<Order[]>("/api/orders")
-        .then(setOrders)
         .catch((e) => {
           setLoadError(e.message);
           toast.error(e.message);
@@ -238,9 +199,6 @@ export default function App() {
       toast.success("Database restored. Refreshing records.");
       if (page === "dashboard") setStats(await api<Stats>("/api/dashboard"));
       if (page === "clients") setClients(await api<Client[]>("/api/clients"));
-      if (page === "quotations")
-        setQuotations(await api<Quotation[]>("/api/quotations"));
-      if (page === "orders") setOrders(await api<Order[]>("/api/orders"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Restore failed.");
     }
@@ -419,89 +377,14 @@ export default function App() {
         </>
       );
     if (page === "quotations")
-      return loadError ? (
-        <LoadFailure message={loadError} />
-      ) : loading ? (
-        <div className="business-panel">Loading quotations…</div>
-      ) : quotations.length ? (
-        <div className="business-panel table-wrap">
-          <table className="records-table">
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Client</th>
-                <th>Title</th>
-                <th>Total</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotations.map((q) => (
-                <tr key={q.id}>
-                  <td>{q.quotation_number}</td>
-                  <td>{q.client_name}</td>
-                  <td>{q.title}</td>
-                  <td>{money(q.total_minor)}</td>
-                  <td>
-                    <span className="record-status">
-                      {q.status.replace(/_/g, " ")}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <Empty
-          title="No quotations yet"
-          text="Quotation records can be created through the validated business API. The full quotation editor is planned for the next milestone."
-          action={() => navigate("clients")}
-          actionLabel="View clients"
+      return (
+        <QuotationsPage
+          onClients={() => navigate("clients")}
+          onConverted={() => navigate("orders")}
         />
       );
     if (page === "orders")
-      return loadError ? (
-        <LoadFailure message={loadError} />
-      ) : loading ? (
-        <div className="business-panel">Loading orders…</div>
-      ) : orders.length ? (
-        <div className="business-panel table-wrap">
-          <table className="records-table">
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Client</th>
-                <th>Project</th>
-                <th>Status</th>
-                <th>Agreed</th>
-                <th>Outstanding</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td>{o.order_number}</td>
-                  <td>{o.client_name}</td>
-                  <td>{o.title}</td>
-                  <td>
-                    <span className="record-status">
-                      {o.status.replace(/_/g, " ")}
-                    </span>
-                  </td>
-                  <td>{money(o.agreed_amount_minor)}</td>
-                  <td>{money(o.outstanding_minor)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <Empty
-          title="No orders or projects yet"
-          text="Orders, payments, and tasks are supported by the local data foundation. The full project tracking interface is planned for the next milestone."
-        />
-      );
+      return <ProjectsPage onClients={() => navigate("clients")} />;
     return (
       <>
         <section className="business-panel">

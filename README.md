@@ -2,7 +2,7 @@
 
 JSN DESIGNS BUSINESS STUDIO is a local-first business workspace built around the existing JSN Mail Studio email editor. It combines that editor and its Gmail SMTP workflow with a SQLite foundation for clients, quotations, orders, payments, and tasks.
 
-This document describes the code that exists in this repository. Milestone 1 establishes the application shell, local database, validated API, client screen, record lists, dashboard, and backup/restore flow. It does not claim that future quotation, project, PDF, or AI interfaces are already implemented.
+This document describes the code that exists in this repository. The app includes the local database and validated API, an email editor, client and quotation workflows, project/order tracking, task and payment entry, a database-backed dashboard, and backup/restore.
 
 ## Contents
 
@@ -17,7 +17,7 @@ This document describes the code that exists in this repository. Milestone 1 est
 - [Security and privacy](#security-and-privacy)
 - [Build and tests](#build-and-tests)
 - [Troubleshooting](#troubleshooting)
-- [Milestone 2 scope](#milestone-2-scope)
+- [Future scope](#future-scope)
 
 ## Requirements
 
@@ -50,15 +50,15 @@ To run only the API, use `npm start`. To build and type-check the frontend and b
 
 Copy `.env.example` to `.env`. Values are read by the backend at startup.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `GMAIL_USER` | Empty | Gmail/Google Workspace sender address. |
-| `GMAIL_APP_PASSWORD` | Empty | Gmail App Password used by Nodemailer. It is never sent to the browser. |
-| `PORT` | `5000` | Express API port. |
-| `HOST` | `127.0.0.1` | Express bind host. Loopback is the intended default. |
-| `CLIENT_URL` | `http://localhost:5173` | Browser origin permitted by CORS and state-changing request checks. |
-| `DATABASE_PATH` | `%LOCALAPPDATA%\JSN Designs Business Studio\business.sqlite` on Windows | SQLite database file. Set an absolute path if you want another location. |
-| `BACKUP_DIR` | `%LOCALAPPDATA%\JSN Designs Business Studio\backups` on Windows | Folder for generated backup snapshots. |
+| Variable             | Default                                                                 | Description                                                              |
+| -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `GMAIL_USER`         | Empty                                                                   | Gmail/Google Workspace sender address.                                   |
+| `GMAIL_APP_PASSWORD` | Empty                                                                   | Gmail App Password used by Nodemailer. It is never sent to the browser.  |
+| `PORT`               | `5000`                                                                  | Express API port.                                                        |
+| `HOST`               | `127.0.0.1`                                                             | Express bind host. Loopback is the intended default.                     |
+| `CLIENT_URL`         | `http://localhost:5173`                                                 | Browser origin permitted by CORS and state-changing request checks.      |
+| `DATABASE_PATH`      | `%LOCALAPPDATA%\JSN Designs Business Studio\business.sqlite` on Windows | SQLite database file. Set an absolute path if you want another location. |
+| `BACKUP_DIR`         | `%LOCALAPPDATA%\JSN Designs Business Studio\backups` on Windows         | Folder for generated backup snapshots.                                   |
 
 On systems without `LOCALAPPDATA` or `APPDATA`, the database and backup folders default to `JSN Designs Business Studio` under the current working directory. The restore upload staging directory also lives under the local application data folder (or current working directory fallback). Database files are kept outside frontend source, public assets, and generated frontend bundles.
 
@@ -96,11 +96,13 @@ The Clients screen reads active clients from the API and can create a client. Re
 
 ### Quotations
 
-The Quotations screen reads saved quotations and shows reference, client, title, total, and status. The API can create a quotation with line items, calculate totals, change its status, return its details, and convert an accepted quotation into an order. The full quotation editor and item-editing workflow are deferred to Milestone 2.
+The Quotations screen creates and edits draft quotations with client selection, descriptions, line items, quantities, INR unit prices, percentage or fixed discounts, issue/valid dates, terms, and notes. The API recalculates monetary values when saved. Users can search by reference/client/title/description, filter by status, inspect line items, duplicate into a new draft, and convert accepted quotations to orders. Only drafts can be edited. Transitions are `draft → sent|cancelled` and `sent → accepted|rejected|expired|cancelled`; changes are audited and final states cannot be reopened. Conversion remains transactional and idempotent.
+
+Quotation dashboard amounts show the total value of displayed quotations; accepted value is separate and is not collected revenue. Tax is not calculated. The validated `GET/PUT /api/business-profile` API stores business contact details and quotation defaults, but the screen does not yet expose profile editing. Server-generated quotation PDF export and quotation attachment prefill in Email Studio are not implemented.
 
 ### Orders & Projects
 
-The Orders & Projects screen reads saved orders and shows client, project, status, agreed amount, and outstanding balance. The API supports order creation and status changes, payments, and tasks. Full project editing, task management, and payment entry screens are deferred to Milestone 2.
+The Orders & Projects screen creates direct orders, updates order status and delivery state, and shows agreed, paid, and outstanding amounts. It can add independent or project-linked tasks, change task status, record partial payments against an order, and inspect payment history. The API rejects payments above the outstanding balance. Order and task forms include due dates, priorities, descriptions, and requirements.
 
 ### Settings
 
@@ -116,6 +118,9 @@ src/
   EmailStudio.tsx                 Preserved email editor and send workflow
   main.tsx                        React entry point and toast provider
   components/SpreadsheetTableEditor.tsx
+  pages/QuotationsPage.tsx         Quotation editor, detail view, lifecycle and conversion
+  pages/ProjectsPage.tsx           Order, task and payment workflows
+  services/api/apiClient.ts        Shared local API client
   services/html.service.ts        Shared email HTML generation and sanitization
   types/email.ts                  Email editor data types
   assets/JSN DESIGN.png           Existing brand asset
@@ -140,16 +145,18 @@ Frontend components call typed local API helpers and do not run SQL. The server 
 
 The SQLite file is local and is never placed in `public/`, `src/`, or `dist/`. At startup the server creates the parent directory, enables foreign keys, uses WAL journaling and a five-second busy timeout, applies any pending versioned migrations, then checks SQLite and foreign-key integrity before listening. Migration versions and application timestamps are stored in `schema_migrations`. Migrations are additive/versioned; startup does not reset existing data.
 
-Migration **001** creates these tables:
+Migration **001** creates the core business tables. Migration **002** adds quotation lifecycle history and the single-row business profile. Startup applies pending numbered migrations to fresh and existing databases:
 
-| Table | Purpose |
-| --- | --- |
-| `clients` | Client contact information, unique client reference, timestamps, and archive marker. |
-| `quotations` | Client relationship, unique quotation reference, status, dates, currency, terms, notes, and server-calculated totals. |
-| `quotation_items` | Separate line items with quantity, paise unit price, calculated line total, and sort order. |
-| `orders` | Client relationship, optional unique source quotation, copied project description and agreed amount, requirements, status, priority, and delivery dates. |
-| `payments` | Order-linked payment entries with amount, date, method, reference, and notes. |
-| `tasks` | Tasks that can stand alone or reference an order, with status, priority, and due date. |
+| Table             | Purpose                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clients`         | Client contact information, unique client reference, timestamps, and archive marker.                                                                     |
+| `quotations`      | Client relationship, unique quotation reference, status, dates, currency, terms, notes, and server-calculated totals.                                    |
+| `quotation_items` | Separate line items with quantity, paise unit price, calculated line total, and sort order.                                                              |
+| `orders`          | Client relationship, optional unique source quotation, copied project description and agreed amount, requirements, status, priority, and delivery dates. |
+| `payments`        | Order-linked payment entries with amount, date, method, reference, and notes.                                                                            |
+| `tasks`           | Tasks that can stand alone or reference an order, with status, priority, and due date.                                                                   |
+| `quotation_status_history` | Timestamped quotation status changes with optional metadata. |
+| `business_profile` | Local business details and quotation defaults (INR only). |
 
 Foreign keys preserve historical relationships. Clients can be archived instead of deleted. Quotations retain their own line items, and converting one copies its title, description, currency, and agreed total into the order so later quotation status changes do not rewrite the order amount.
 
@@ -181,18 +188,18 @@ The API base is `http://127.0.0.1:5000/api` when running directly; frontend code
 
 ### Health and dashboard
 
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/health` | API health and service name. |
-| `GET` | `/dashboard` | Counts, outstanding amount in paise, and upcoming open tasks from actual records. |
+| Method | Path         | Result                                                                            |
+| ------ | ------------ | --------------------------------------------------------------------------------- |
+| `GET`  | `/health`    | API health and service name.                                                      |
+| `GET`  | `/dashboard` | Counts, outstanding amount in paise, and upcoming open tasks from actual records. |
 
 ### Clients
 
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/clients` | List non-archived clients. |
-| `POST` | `/clients` | Create a client. Required: `name`; optional: `company_name`, `email`, `phone`, `address`, `notes`. |
-| `PATCH` | `/clients/:id/archive` | Archive an active client. |
+| Method  | Path                   | Result                                                                                             |
+| ------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `GET`   | `/clients`             | List non-archived clients.                                                                         |
+| `POST`  | `/clients`             | Create a client. Required: `name`; optional: `company_name`, `email`, `phone`, `address`, `notes`. |
+| `PATCH` | `/clients/:id/archive` | Archive an active client.                                                                          |
 
 Example:
 
@@ -209,13 +216,17 @@ Example:
 
 ### Quotations
 
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/quotations` | List quotations with client names. |
-| `POST` | `/quotations` | Create a quotation and its line items; server calculates line, subtotal, discount, and total amounts. |
-| `GET` | `/quotations/:id` | Read one quotation and its line items. |
-| `PATCH` | `/quotations/:id/status` | Set a quotation status. JSON: `{"status":"accepted"}`. |
-| `POST` | `/quotations/:id/convert` | Convert an accepted quotation. JSON body may be `{}`; optional explicit override: `{"confirm_unaccepted":true}`. |
+| Method  | Path                      | Result                                                                                                           |
+| ------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/quotations`             | List quotations; optional `search`, `status`, `from`, and `to` filters.                                           |
+| `POST`  | `/quotations`             | Create a quotation and its line items; server calculates line, subtotal, discount, and total amounts.            |
+| `PUT`   | `/quotations/:id`         | Recalculate and replace quotation details/items transactionally. Converted quotations are locked.                |
+| `GET`   | `/quotations/:id`         | Read one quotation and its line items.                                                                           |
+| `PATCH` | `/quotations/:id/status`  | Set a quotation status. JSON: `{"status":"accepted"}`. Converted quotations are locked.                          |
+| `POST`  | `/quotations/:id/duplicate` | Duplicate quotation content into a new draft with a new reference.                                              |
+| `POST`  | `/quotations/:id/convert` | Convert an accepted quotation. JSON body may be `{}`; optional explicit override: `{"confirm_unaccepted":true}`. |
+| `GET`   | `/business-profile`       | Read local business details and quotation defaults.                                                               |
+| `PUT`   | `/business-profile`       | Update validated business details and quotation defaults.                                                         |
 
 Example creation request (unit prices are paise; fixed discount value is rupees):
 
@@ -241,16 +252,16 @@ Example creation request (unit prices are paise; fixed discount value is rupees)
 
 ### Orders, payments, and tasks
 
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/orders` | List orders with client names and derived paid/outstanding paise amounts. |
-| `POST` | `/orders` | Create an order directly. Required: `client_id`, `title`, `agreed_amount_minor`; optional: description, requirements, priority, order date, due date. |
-| `PATCH` | `/orders/:id/status` | Change order status. Setting `delivered` records `delivered_at`. |
-| `GET` | `/orders/:id/payments` | List an order's payments. |
-| `POST` | `/orders/:id/payments` | Record a payment. `amount_minor` is required; amount cannot exceed outstanding balance. |
-| `GET` | `/tasks` | List tasks, including linked order reference where present. |
-| `POST` | `/tasks` | Create an independent or order-linked task. Required: `title`; optional: `order_id`, description, status, priority, due date. |
-| `PATCH` | `/tasks/:id/status` | Change task status. Completing a task records its completion timestamp. |
+| Method  | Path                   | Result                                                                                                                                                |
+| ------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/orders`              | List orders with client names and derived paid/outstanding paise amounts.                                                                             |
+| `POST`  | `/orders`              | Create an order directly. Required: `client_id`, `title`, `agreed_amount_minor`; optional: description, requirements, priority, order date, due date. |
+| `PATCH` | `/orders/:id/status`   | Change order status. Setting `delivered` records `delivered_at`.                                                                                      |
+| `GET`   | `/orders/:id/payments` | List an order's payments.                                                                                                                             |
+| `POST`  | `/orders/:id/payments` | Record a payment. `amount_minor` is required; amount cannot exceed outstanding balance.                                                               |
+| `GET`   | `/tasks`               | List tasks, including linked order reference where present.                                                                                           |
+| `POST`  | `/tasks`               | Create an independent or order-linked task. Required: `title`; optional: `order_id`, description, status, priority, due date.                         |
+| `PATCH` | `/tasks/:id/status`    | Change task status. Completing a task records its completion timestamp.                                                                               |
 
 Payment example:
 
@@ -268,13 +279,13 @@ This records ₹500.00. Payments inherit the order currency; this milestone defa
 
 ### Backups and email
 
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/backup` | Create a consistent SQLite snapshot in `BACKUP_DIR` and return it as a download. |
-| `POST` | `/restore` | Restore one SQLite file uploaded as multipart field `backup` (maximum 200 MB). |
-| `GET` | `/email/config` | Return connection status and configured sender address, never the App Password. |
-| `POST` | `/email/test` | Send the current email payload to the configured sender address. |
-| `POST` | `/email/send` | Send the current email payload to its To recipients. |
+| Method | Path            | Result                                                                           |
+| ------ | --------------- | -------------------------------------------------------------------------------- |
+| `GET`  | `/backup`       | Create a consistent SQLite snapshot in `BACKUP_DIR` and return it as a download. |
+| `POST` | `/restore`      | Restore one SQLite file uploaded as multipart field `backup` (maximum 200 MB).   |
+| `GET`  | `/email/config` | Return connection status and configured sender address, never the App Password.  |
+| `POST` | `/email/test`   | Send the current email payload to the configured sender address.                 |
+| `POST` | `/email/send`   | Send the current email payload to its To recipients.                             |
 
 Email endpoints retain the editor's multipart request format: JSON content in form field `payload`, and zero or more uploaded files in `attachments`. To, CC, and BCC addresses and the subject are validated by the server. Attachment filenames are normalized before sending. No real email is sent by the automated test suite.
 
@@ -311,6 +322,7 @@ npm test
 - New database initialization, repeatable migration, foreign-key enforcement, integrity checks, and empty dashboard aggregation.
 - Client input validation and email normalization.
 - Quotation percentage and fixed discounts, paise rounding, negative/invalid values, and backend total calculations.
+- Quotation edit recalculation, transactional line-item replacement, and edit/status lock after conversion.
 - Accepted-quotation conversion, rejection of unaccepted conversion by default, and duplicate conversion prevention.
 - Payment balance calculations and overpayment rejection; task creation and status updates.
 - Database-backed dashboard aggregation, snapshot backup, invalid-backup rejection, successful restore, and recovery-file preservation.
@@ -340,6 +352,6 @@ Choose a complete SQLite backup generated by this application. A renamed file is
 
 `npm run preview` serves only `dist`; it does not run the API or configure the development proxy. Start the API separately and configure a frontend server/proxy for `/api` if you use a non-development deployment.
 
-## Milestone 2 scope
+## Future scope
 
-Planned follow-on work includes full quotation creation and editing screens, quotation item management and lifecycle actions, project detail and workflow screens, payment/task entry interfaces, and AI-assisted editable email generation. PDF generation, tax calculation, user authentication, and multi-user deployment are outside this milestone.
+Potential follow-on work includes quotation PDF export, profile editing in the UI, and safe attachment handoff to Email Studio. Tax calculation, user authentication, and multi-user deployment are not implemented.

@@ -40,7 +40,23 @@ export const quotationSchema = z
         path: ["discount_value"],
         message: "Percentage discount cannot exceed 100.",
       });
+    if (v.valid_until && v.issue_date && v.valid_until < v.issue_date)
+      ctx.addIssue({ code: "custom", path: ["valid_until"], message: "Validity date cannot be before the issue date." });
+    if (v.discount_type === "fixed" && Math.round(v.discount_value * 100) > 1_000_000_000)
+      ctx.addIssue({ code: "custom", path: ["discount_value"], message: "Discount amount is too large." });
   });
+
+export const businessProfileSchema = z.object({
+  business_name: z.string().trim().max(160),
+  contact_person: z.string().trim().max(160),
+  email: z.string().trim().email().max(254).or(z.literal("")),
+  phone: z.string().trim().max(40),
+  address: z.string().trim().max(1000),
+  website: z.string().trim().max(300),
+  default_terms: z.string().trim().max(4000),
+  default_validity_days: z.number().int().min(1).max(365),
+  currency: z.literal("INR"),
+});
 export const orderSchema = z.object({
   client_id: z.string().uuid(),
   title: z.string().trim().min(1).max(200),
