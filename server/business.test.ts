@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import {
   mkdtempSync,
   readFileSync,
@@ -18,6 +19,7 @@ import {
 import { createApp } from "./app.ts";
 import { generateEmailHtml } from "./services/html.service.ts";
 import type { EmailDraft } from "../src/types/email.ts";
+import { extractPdfText } from "./quotation-pdf-test-utils.ts";
 
 test("business database, APIs, calculations, backups and HTML generation", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "jsn-business-test-"));
@@ -79,6 +81,17 @@ test("business database, APIs, calculations, backups and HTML generation", async
         0,
       );
       assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
+      const legacyPath = join(root, "legacy.sqlite");
+      const legacy = new Database(legacyPath);
+      legacy.exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)");
+      legacy.exec(readFileSync(join(process.cwd(), "server/db/migrations/001_initial.sql"), "utf8"));
+      legacy.prepare("INSERT INTO schema_migrations(version,applied_at) VALUES(1,?)").run(new Date().toISOString());
+      legacy.prepare("INSERT INTO clients(id,client_code,name,created_at,updated_at) VALUES(?,?,?,?,?)").run("00000000-0000-4000-8000-000000000001", "CL-LEGACY", "Legacy client", "2020-01-01T00:00:00.000Z", "2020-01-01T00:00:00.000Z");
+      legacy.close();
+      const upgradedLegacy = openDatabase(legacyPath);
+      assert.equal((upgradedLegacy.prepare("SELECT name FROM clients WHERE client_code='CL-LEGACY'").get() as any).name, "Legacy client");
+      assert.equal((upgradedLegacy.prepare("SELECT COUNT(*) count FROM schema_migrations").get() as any).count, 2);
+      upgradedLegacy.close();
     },
   );
 
@@ -99,6 +112,29 @@ test("business database, APIs, calculations, backups and HTML generation", async
   await t.test(
     "validates clients; calculates quotation; converts once; tracks payment and task",
     async () => {
+      const profileDefaults = await call("/business-profile");
+      assert.equal(profileDefaults.status, 200);
+      assert.equal(profileDefaults.data.currency, "INR");
+      assert.equal(profileDefaults.data.default_validity_days, 30);
+      const profileUpdate = await call("/business-profile", "PUT", {
+        business_name: "JSN Designs",
+        contact_person: "Studio",
+        email: "hello@example.com",
+        phone: "+91 90000 00000",
+        address: "Mumbai, India",
+        website: "https://example.com",
+        default_terms: "Payment due within 14 days.",
+        default_validity_days: 21,
+        currency: "INR",
+      });
+      assert.equal(profileUpdate.status, 200);
+      assert.equal(profileUpdate.data.business_name, "JSN Designs");
+      const profileDbReopen = openDatabase(dbPath);
+      assert.equal((profileDbReopen.prepare("SELECT business_name FROM business_profile WHERE id=1").get() as any).business_name, "JSN Designs");
+      profileDbReopen.close();
+      assert.equal((await call("/business-profile", "PUT", {
+        business_name: "", contact_person: "", email: "bad-email", phone: "", address: "", website: "", default_terms: "", default_validity_days: 0, currency: "USD",
+      })).status, 400);
       assert.equal((await call("/clients", "POST", { name: "" })).status, 400);
       const made = await call("/clients", "POST", {
         name: "A Client",
@@ -122,6 +158,30 @@ test("business database, APIs, calculations, backups and HTML generation", async
       assert.equal(quote.data.subtotal_minor, 25000);
       assert.equal(quote.data.discount_minor, 2500);
       assert.equal(quote.data.total_minor, 22500);
+      const pdfResponse = await fetch(`${base}/quotations/${quote.data.id}/pdf`);
+      assert.equal(pdfResponse.status, 200);
+      assert.match(pdfResponse.headers.get("content-type") || "", /application\/pdf/);
+      assert.match(pdfResponse.headers.get("content-disposition") || "", /^attachment; filename="quotation_[A-Za-z0-9._-]+\.pdf"$/);
+      const pdfBytes = Buffer.from(await pdfResponse.arrayBuffer());
+      assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
+      const pdfText = await extractPdfText(pdfBytes);
+      assert.ok(pdfText.text.includes("Brand identity"));
+      assert.ok(pdfText.text.includes("Logo"));
+      assert.ok(pdfText.text.includes("INR 225.00"));
+      assert.equal((await call(`/quotations/${quote.data.id}`)).data.status, "draft");
+      const missingPdf = await call("/quotations/00000000-0000-4000-8000-000000000000/pdf");
+      assert.equal(missingPdf.status, 404);
+      const largeQuotation = await call("/quotations", "POST", {
+        client_id: client.id,
+        title: "Long multi-page quotation",
+        items: Array.from({ length: 100 }, (_, index) => ({ description: `Service ${index + 1} — ${"Extended work description ".repeat(8)}`, quantity: 1, unit_price_minor: 1000 })),
+      });
+      assert.equal(largeQuotation.status, 201);
+      const multiPage = await fetch(`${base}/quotations/${largeQuotation.data.id}/pdf`);
+      assert.equal(multiPage.status, 200);
+      const multiPageBytes = Buffer.from(await multiPage.arrayBuffer());
+      assert.equal(multiPageBytes.subarray(0, 5).toString(), "%PDF-");
+      assert.ok((await extractPdfText(multiPageBytes)).pageCount > 1);
       const copied = await call(`/quotations/${quote.data.id}/duplicate`, "POST", {});
       assert.equal(copied.status, 201);
       assert.equal(copied.data.status, "draft");
@@ -400,6 +460,11 @@ test("business database, APIs, calculations, backups and HTML generation", async
         ).status,
         400,
       );
+      const withAttachment = new FormData();
+      withAttachment.append("payload", JSON.stringify({ to: "client@example.com", subject: "Quotation", greeting: "Hello", title: "Quotation attached", sections: [], closing: "Regards", signature: "JSN Designs" }));
+      withAttachment.append("attachments", new Blob([Buffer.from("%PDF-1.4 test")], { type: "application/pdf" }), "quotation_QT-test.pdf");
+      const attachmentResponse = await fetch(`${base}/email/send`, { method: "POST", body: withAttachment });
+      assert.equal(attachmentResponse.status, 503, "Valid attachment payload should pass validation and stop at unconfigured SMTP without sending.");
       const config = await fetch(`${base}/email/config`);
       assert.equal(config.status, 200);
       assert.equal("password" in ((await config.json()) as object), false);

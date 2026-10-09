@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import multer from "multer";
 import { z } from "zod";
+import { createQuotationPdf } from "../services/quotation-pdf.ts";
 import {
   getDatabase,
   removeDatabaseFile,
@@ -351,6 +352,27 @@ router.get("/quotations/:id", (req, res) => {
       .all(id.data),
     status_history: getDatabase().prepare("SELECT previous_status,new_status,changed_at,metadata FROM quotation_status_history WHERE quotation_id=? ORDER BY changed_at").all(id.data),
   });
+});
+router.get("/quotations/:id/pdf", (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return bad(res, "Invalid quotation id.");
+  const db = getDatabase();
+  const quotation = db.prepare(`SELECT q.*, c.name client_name, c.company_name, c.email client_email, c.phone client_phone, c.address client_address,
+    COALESCE(p.business_name,'') business_name, COALESCE(p.contact_person,'') contact_person, COALESCE(p.email,'') email,
+    COALESCE(p.phone,'') phone, COALESCE(p.address,'') address, COALESCE(p.website,'') website
+    FROM quotations q JOIN clients c ON c.id=q.client_id LEFT JOIN business_profile p ON p.id=1 WHERE q.id=?`).get(id.data) as any;
+  if (!quotation) return bad(res, "Quotation not found.", 404);
+  const items = db.prepare("SELECT description,quantity,unit_price_minor,line_total_minor FROM quotation_items WHERE quotation_id=? ORDER BY sort_order").all(id.data) as any[];
+  const filename = `quotation_${quotation.quotation_number.replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`;
+  res.status(200);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    createQuotationPdf(quotation, items, res, () => { if (!res.headersSent) bad(res, "Unable to generate quotation PDF.", 500); else res.destroy(); });
+  } catch {
+    return bad(res, "Unable to generate quotation PDF.", 500);
+  }
 });
 router.patch("/quotations/:id/status", (req, res) => {
   const id = z.string().uuid().safeParse(req.params.id),

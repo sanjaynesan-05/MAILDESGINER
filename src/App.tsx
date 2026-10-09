@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import EmailStudio from "./EmailStudio";
 import QuotationsPage from "./pages/QuotationsPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import BusinessProfileForm from "./components/BusinessProfileForm";
 import logoUrl from "./assets/JSN DESIGN.png";
 
 type Page =
@@ -381,12 +382,17 @@ export default function App() {
         <QuotationsPage
           onClients={() => navigate("clients")}
           onConverted={() => navigate("orders")}
+          onEmailStudio={() => {
+            toast("Attach the downloaded quotation PDF and review your email before sending.");
+            navigate("email");
+          }}
         />
       );
     if (page === "orders")
       return <ProjectsPage onClients={() => navigate("clients")} />;
     return (
       <>
+        <BusinessProfileForm />
         <section className="business-panel">
           <h2>Local database</h2>
           <p>

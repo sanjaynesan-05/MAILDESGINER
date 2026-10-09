@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Copy, Eye, FilePlus2, Minus, Plus, Save, Search, X } from "lucide-react";
+import { ArrowRight, Copy, Download, Eye, FilePlus2, Minus, Plus, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, jsonRequest } from "../services/api/apiClient";
 import type {
@@ -56,9 +56,11 @@ const itemAmount = (item: ItemDraft) =>
 export default function QuotationsPage({
   onClients,
   onConverted,
+  onEmailStudio,
 }: {
   onClients: () => void;
   onConverted: () => void;
+  onEmailStudio: () => void;
 }) {
   const [quotes, setQuotes] = useState<Quotation[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -70,6 +72,9 @@ export default function QuotationsPage({
   const [details, setDetails] = useState<Quotation | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+  const [downloadedPdfId, setDownloadedPdfId] = useState<string | null>(null);
+  const [quotationDefaults, setQuotationDefaults] = useState<{ default_terms: string; default_validity_days: number } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -92,6 +97,9 @@ export default function QuotationsPage({
     api<Client[]>("/api/clients")
       .then(setClients)
       .catch((e) => toast.error(e.message));
+    api<{ default_terms: string; default_validity_days: number }>("/api/business-profile")
+      .then(setQuotationDefaults)
+      .catch(() => undefined);
   }, [refresh]);
 
   const totals = useMemo(() => {
@@ -108,7 +116,9 @@ export default function QuotationsPage({
 
   const startCreate = () => {
     setEditingId(null);
-    setForm({ ...blankForm(), client_id: clients[0]?.id ?? "" });
+    const validUntil = new Date(`${dateToday()}T00:00:00.000Z`);
+    validUntil.setUTCDate(validUntil.getUTCDate() + (quotationDefaults?.default_validity_days ?? 30));
+    setForm({ ...blankForm(), client_id: clients[0]?.id ?? "", terms: quotationDefaults?.default_terms ?? "", valid_until: validUntil.toISOString().slice(0, 10) });
   };
   const startEdit = async (quote: Quotation) => {
     try {
@@ -215,6 +225,30 @@ export default function QuotationsPage({
       await refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Unable to duplicate quotation."); }
   };
+  const downloadPdf = async (quote: Quotation) => {
+    if (pdfLoadingId) return;
+    setPdfLoadingId(quote.id);
+    try {
+      const response = await fetch(`/api/quotations/${quote.id}/pdf`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || `PDF download failed (${response.status}).`);
+      }
+      if (!response.headers.get("content-type")?.includes("application/pdf")) throw new Error("The server did not return a PDF file.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `quotation_${quote.quotation_number.replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setDownloadedPdfId(quote.id);
+      toast.success("Quotation PDF downloaded. Attach it in Email Studio when composing your message.");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Unable to download quotation PDF."); }
+    finally { setPdfLoadingId(null); }
+  };
 
   return (
     <>
@@ -294,6 +328,7 @@ export default function QuotationsPage({
                         <Eye size={15} />
                       </button>
                       <button className="icon-action" title="Duplicate as draft" aria-label={`Duplicate ${q.quotation_number}`} onClick={()=>void duplicate(q)}><Copy size={15}/></button>
+                      <button className="icon-action" title="Download quotation PDF" aria-label={`Download PDF for ${q.quotation_number}`} disabled={Boolean(pdfLoadingId)} onClick={()=>void downloadPdf(q)}><Download size={15}/></button>
                       <button
                         className="icon-action"
                         title="Edit quotation"
@@ -678,6 +713,8 @@ export default function QuotationsPage({
               >
                 Close
               </button>
+              <button className="secondary-button" disabled={Boolean(pdfLoadingId)} onClick={()=>void downloadPdf(details)}><Download size={14}/>{pdfLoadingId===details.id ? "Preparing PDF…" : "Download PDF"}</button>
+              {downloadedPdfId===details.id && <button className="studio-button" onClick={onEmailStudio}>Open Email Studio</button>}
             </footer>
           </section>
         </div>
